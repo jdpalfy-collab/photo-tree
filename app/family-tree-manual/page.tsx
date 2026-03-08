@@ -58,6 +58,7 @@ export default function FamilyTreeManualPage() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string>("");
+  const [isDirty, setIsDirty] = useState(false);
   const [selectionRect, setSelectionRect] = useState<{
     x: number;
     y: number;
@@ -130,6 +131,10 @@ export default function FamilyTreeManualPage() {
   }, [status]);
 
   async function saveNow(payload?: { positions: Record<string, { x: number; y: number }>; items: Item[] }) {
+    if (status !== "authenticated") {
+      setIsDirty(true);
+      return;
+    }
     const data = payload || latestPayloadRef.current || { positions, items };
     latestPayloadRef.current = data;
     setSaveStatus("saving");
@@ -146,6 +151,7 @@ export default function FamilyTreeManualPage() {
         throw new Error(j?.error || "save failed");
       }
       setSaveStatus("saved");
+      setIsDirty(false);
       window.setTimeout(() => setSaveStatus("idle"), 1500);
     } catch {
       setSaveStatus("error");
@@ -157,6 +163,7 @@ export default function FamilyTreeManualPage() {
     const payload = { positions, items };
     latestPayloadRef.current = payload;
     window.localStorage.setItem("photoTreeManualState", JSON.stringify(payload));
+    setIsDirty(true);
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     setSaveStatus("saving");
     saveTimerRef.current = window.setTimeout(() => {
@@ -180,6 +187,22 @@ export default function FamilyTreeManualPage() {
       document.removeEventListener("visibilitychange", onVisChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    if (isDirty) {
+      saveNow();
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    if (!isDirty) return;
+    const id = window.setInterval(() => {
+      saveNow();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [status, isDirty]);
 
   async function loadPeople() {
     setErr("");
