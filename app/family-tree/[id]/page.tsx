@@ -26,7 +26,10 @@ type Photo = {
   location?: string | null;
   description?: string | null;
   rotation?: number | null;
-  tags?: { id: string; person: { id: string; name: string } }[];
+  tags?: {
+    id: string;
+    person: { id: string; name: string; firstName?: string | null; lastName?: string | null };
+  }[];
 };
 
 function proxyImgUrl(baseUrl: string, photoId: string, w = 600, h = 600) {
