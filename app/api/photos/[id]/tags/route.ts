@@ -24,15 +24,10 @@ export async function GET(_req: NextRequest) {
   }
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const photoId =
-      params?.id ||
-      url.pathname.split("/").filter(Boolean).slice(-2)[0];
+    const photoId = url.pathname.split("/").filter(Boolean).slice(-2)[0];
     const body = await req.json().catch(() => ({}));
     const personIds = Array.isArray(body?.personIds) ? body.personIds : [];
 
@@ -78,15 +73,10 @@ export async function POST(
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const photoId =
-      params?.id ||
-      url.pathname.split("/").filter(Boolean).slice(-2)[0];
+    const photoId = url.pathname.split("/").filter(Boolean).slice(-2)[0];
     const { searchParams } = new URL(req.url);
     const personId = searchParams.get("personId");
 
