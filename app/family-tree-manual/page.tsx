@@ -186,7 +186,7 @@ export default function FamilyTreeManualPage() {
       setErr(JSON.stringify(j, null, 2));
       return;
     }
-    const list = Array.isArray(j?.people) ? j.people : [];
+    const list: Person[] = Array.isArray(j?.people) ? j.people : [];
     setPeople(list);
 
     // initialize positions if missing
@@ -195,7 +195,7 @@ export default function FamilyTreeManualPage() {
       const next: Record<string, { x: number; y: number }> = {};
       const colW = 280;
       const rowH = 320;
-      list.forEach((p, idx) => {
+      list.forEach((p: Person, idx) => {
         const col = idx % 3;
         const row = Math.floor(idx / 3);
         next[p.id] = { x: col * colW, y: row * rowH };
