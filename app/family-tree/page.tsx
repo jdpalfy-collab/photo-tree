@@ -378,6 +378,11 @@ export default function FamilyTreePage() {
     };
   }, [people, relationships, rootId, nodeHeight]);
 
+  const nodeW = tree.nodeW ?? 220;
+  const nodeH = tree.nodeH ?? 220;
+  const gapX = tree.gapX ?? nodeW;
+  const rowStep = tree.rowStep ?? Math.max(220, Math.round(nodeH * 1.6));
+
   return (
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
       {(() => {
@@ -593,9 +598,9 @@ export default function FamilyTreePage() {
           <div
             style={{
               position: "relative",
-              width: Math.max(600, tree.levels[0].length * (tree.nodeW + tree.gapX)),
+              width: Math.max(600, tree.levels[0].length * (nodeW + gapX)),
               height: Math.max(
-                (tree.levels.length - 1) * (tree.rowStep ?? 200) + (tree.nodeH ?? 220) + 80,
+                (tree.levels.length - 1) * rowStep + nodeH + 80,
                 1200
               ),
               zIndex: 2,
@@ -625,8 +630,8 @@ export default function FamilyTreePage() {
                     position: "absolute",
                     left: pos.x,
                     top: pos.y,
-                    width: tree.nodeW,
-                    height: tree.nodeH,
+                    width: nodeW,
+                    height: nodeH,
                     border: "2px solid #cfe4ff",
                     borderRadius: 12,
                     padding: 10,
