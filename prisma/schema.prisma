@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+
+model Photo {
+  id          String   @id
+  baseUrl     String
+  mimeType    String
+  width       Int?
+  height      Int?
+  createdTime DateTime?
+  createdAt   DateTime @default(now())
+  localPath   String?
+  location    String?
+  description String?
+  rotation    Int?
+  tags        PhotoTag[]
+}
+
+model Person {
+  id        String     @id @default(uuid())
+  name      String
+  firstName String?
+  lastName  String?
+  birthYear Int?
+  profileZoom Float?
+  profileX Float?
+  profileY Float?
+  createdAt DateTime   @default(now())
+  profilePhotoId String?
+  tags      PhotoTag[]
+  relationshipsFrom Relationship[] @relation("RelationshipFrom")
+  relationshipsTo   Relationship[] @relation("RelationshipTo")
+}
+
+model PhotoTag {
+  id        String   @id @default(uuid())
+  photoId   String
+  personId  String
+  createdAt DateTime @default(now())
+
+  photo  Photo  @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([photoId, personId])
+  @@index([photoId])
+  @@index([personId])
+}
+
+model Relationship {
+  id        String   @id @default(uuid())
+  fromId    String
+  toId      String
+  type      String   // parent | child | sibling | spouse
+  createdAt DateTime @default(now())
+
+  from Person @relation("RelationshipFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   Person @relation("RelationshipTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@index([fromId])
+  @@index([toId])
+  @@unique([fromId, toId, type])
+}
+
+model ManualLayout {
+  id        String   @id
+  data      String
+  updatedAt DateTime @updatedAt
+}
+
+model EditLock {
+  id          String   @id
+  holderEmail String?
+  holderName  String?
+  expiresAt   DateTime?
+  updatedAt   DateTime @updatedAt
+}

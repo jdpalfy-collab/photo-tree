@@ -1,0 +1,36 @@
+import NextAuth from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
+
+const handler = NextAuth({
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope:
+            "openid email profile https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/photoslibrary.readonly",
+          prompt: "consent",
+          access_type: "offline",
+          include_granted_scopes: "true",
+        },
+      },
+    }),
+  ],
+  callbacks: {
+    async jwt({ token, account }) {
+      // First time user signs in, persist the access_token to the token
+      if (account?.access_token) {
+        token.accessToken = account.access_token;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      // Expose accessToken to the client (we will call our own API routes)
+      (session as any).accessToken = token.accessToken;
+      return session;
+    },
+  },
+});
+
+export { handler as GET, handler as POST };
