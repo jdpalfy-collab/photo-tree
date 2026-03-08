@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useEditingMode } from "../providers";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 type Person = {
   id: string;
@@ -44,6 +45,7 @@ function displayName(p: Person) {
 }
 
 export default function FamilyTreeManualPage() {
+  const { status } = useSession();
   const { mode } = useEditingMode();
   const isEditing = mode === "editing";
   const router = useRouter();
@@ -89,6 +91,7 @@ export default function FamilyTreeManualPage() {
   });
 
   useEffect(() => {
+    if (status !== "authenticated") return;
     let didSet = false;
     fetch("/api/manual-layout", { cache: "no-store" })
       .then((r) => r.json())
@@ -124,7 +127,7 @@ export default function FamilyTreeManualPage() {
           }
         }
       });
-  }, []);
+  }, [status]);
 
   async function saveNow(payload?: { positions: Record<string, { x: number; y: number }>; items: Item[] }) {
     const data = payload || latestPayloadRef.current || { positions, items };
@@ -212,8 +215,9 @@ export default function FamilyTreeManualPage() {
   }
 
   useEffect(() => {
+    if (status !== "authenticated") return;
     loadPeople();
-  }, []);
+  }, [status]);
 
   useEffect(() => {
     if (people.length === 0) return;
