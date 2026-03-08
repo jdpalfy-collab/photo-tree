@@ -9,7 +9,7 @@ const EditingModeContext = createContext<{
   mode: EditingMode;
   setMode: (mode: EditingMode) => void;
 }>({
-  mode: "editing",
+  mode: "viewing",
   setMode: () => {},
 });
 
@@ -25,10 +25,10 @@ export function Providers({
   initialMode?: EditingMode;
 }) {
   const [mode, setMode] = useState<EditingMode>(() => {
-    if (typeof window === "undefined") return initialMode ?? "editing";
+    if (typeof window === "undefined") return initialMode ?? "viewing";
     const stored = window.localStorage.getItem("photoTreeMode");
     if (stored === "editing" || stored === "viewing") return stored;
-    return initialMode ?? "editing";
+    return initialMode ?? "viewing";
   });
 
   const value = useMemo(
