@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
 export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  req: NextRequest
 ) {
   try {
     const url = new URL(req.url);
     const personId =
-      params?.id || url.pathname.split("/").filter(Boolean).slice(-1)[0];
+      url.pathname.split("/").filter(Boolean).slice(-1)[0];
 
     if (!personId) {
       return NextResponse.json({ ok: false, error: "personId is required" }, { status: 400 });
