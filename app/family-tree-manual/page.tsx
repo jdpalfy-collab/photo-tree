@@ -92,6 +92,7 @@ export default function FamilyTreeManualPage() {
     startY: 0,
     active: false,
   });
+  const autoFrameAppliedRef = useRef(false);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -748,58 +749,59 @@ export default function FamilyTreeManualPage() {
 
   useEffect(() => {
     if (!isHydrated) return;
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
+    if (autoFrameAppliedRef.current) return;
+    autoFrameAppliedRef.current = true;
 
-    Object.values(positions).forEach((p) => {
-      if (p.x < minX) minX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.x + cardSize < maxX) {
-        // noop
+    const applyFrame = () => {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+
+      Object.values(positions).forEach((p) => {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x + cardSize > maxX) maxX = p.x + cardSize;
+      });
+
+      items.forEach((it) => {
+        if (it.x < minX) minX = it.x;
+        if (it.y < minY) minY = it.y;
+        if (it.x > maxX) maxX = it.x;
+      });
+
+      if (!Number.isFinite(minX)) minX = 0;
+      if (!Number.isFinite(minY)) minY = 0;
+      if (!Number.isFinite(maxX)) maxX = minX;
+
+      let dx = minX < buffer ? buffer - minX : 0;
+      let dy = minY < buffer ? buffer - minY : 0;
+
+      const viewW = containerRef.current?.clientWidth ?? 0;
+      if (viewW > 0 && maxX + dx > viewW - buffer) {
+        dx -= maxX + dx - (viewW - buffer);
       }
-      if (p.x + cardSize > maxX) maxX = p.x + cardSize;
-      if (p.y + cardSize > maxY) maxY = p.y + cardSize;
-    });
 
-    items.forEach((it) => {
-      if (it.x < minX) minX = it.x;
-      if (it.y < minY) minY = it.y;
-      if (it.x > maxX) maxX = it.x;
-      if (it.y > maxY) maxY = it.y;
-    });
+      if (dx === 0 && dy === 0) return;
 
-    if (!Number.isFinite(minX)) minX = 0;
-    if (!Number.isFinite(minY)) minY = 0;
-    if (!Number.isFinite(maxX)) maxX = minX;
-    if (!Number.isFinite(maxY)) maxY = minY;
+      setPositions((prev) => {
+        const next: Record<string, { x: number; y: number }> = {};
+        for (const [id, p] of Object.entries(prev)) {
+          next[id] = { x: p.x + dx, y: p.y + dy };
+        }
+        return next;
+      });
+      setItems((prev) =>
+        prev.map((it) => ({
+          ...it,
+          x: it.x + dx,
+          y: it.y + dy,
+        }))
+      );
+    };
 
-    let dx = minX < buffer ? buffer - minX : 0;
-    let dy = minY < buffer ? buffer - minY : 0;
-
-    const viewW = containerRef.current?.clientWidth ?? 0;
-    if (viewW > 0 && maxX + dx > viewW - buffer) {
-      dx -= maxX + dx - (viewW - buffer);
-    }
-
-    if (dx === 0 && dy === 0) return;
-
-    setPositions((prev) => {
-      const next: Record<string, { x: number; y: number }> = {};
-      for (const [id, p] of Object.entries(prev)) {
-        next[id] = { x: p.x + dx, y: p.y + dy };
-      }
-      return next;
-    });
-    setItems((prev) =>
-      prev.map((it) => ({
-        ...it,
-        x: it.x + dx,
-        y: it.y + dy,
-      }))
-    );
-  }, [positions, items, isHydrated, buffer]);
+    // run once after initial layout is in place
+    window.setTimeout(applyFrame, 0);
+  }, [isHydrated]);
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
@@ -816,6 +818,24 @@ export default function FamilyTreeManualPage() {
           <button onClick={() => addLine("h-black")} style={{ fontSize: 12 }}>Add horizontal black line</button>
           <button onClick={() => addLine("h-blue")} style={{ fontSize: 12 }}>Add horizontal blue line</button>
           <button onClick={addHeart} style={{ fontSize: 12 }}>Add blue heart</button>
+          <button
+            onClick={() => {
+              const next: Record<string, { x: number; y: number }> = {};
+              const colW = 280;
+              const rowH = 320;
+              people.forEach((p, idx) => {
+                const col = idx % 3;
+                const row = Math.floor(idx / 3);
+                next[p.id] = { x: col * colW, y: row * rowH };
+              });
+              setPositions(next);
+              setItems([]);
+              void saveNow({ positions: next, items: [] });
+            }}
+            style={{ fontSize: 12 }}
+          >
+            Reset layout
+          </button>
           <button onClick={() => saveNow()} style={{ fontSize: 12 }}>Save now</button>
           <button
             onClick={() => {
