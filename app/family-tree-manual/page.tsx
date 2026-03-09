@@ -844,31 +844,20 @@ export default function FamilyTreeManualPage() {
     const applyFrame = () => {
       let minX = Infinity;
       let minY = Infinity;
-      let maxX = -Infinity;
-
       Object.values(positions).forEach((p) => {
         if (p.x < minX) minX = p.x;
         if (p.y < minY) minY = p.y;
-        if (p.x + cardSize > maxX) maxX = p.x + cardSize;
       });
 
       items.forEach((it) => {
         if (it.x < minX) minX = it.x;
         if (it.y < minY) minY = it.y;
-        if (it.x > maxX) maxX = it.x;
       });
 
       if (!Number.isFinite(minX)) minX = 0;
       if (!Number.isFinite(minY)) minY = 0;
-      if (!Number.isFinite(maxX)) maxX = minX;
-
       let dx = minX < buffer ? buffer - minX : 0;
       let dy = minY < buffer ? buffer - minY : 0;
-
-      const viewW = containerRef.current?.clientWidth ?? 0;
-      if (viewW > 0 && maxX + dx > viewW - buffer) {
-        dx -= maxX + dx - (viewW - buffer);
-      }
 
       if (dx === 0 && dy === 0) return;
 
