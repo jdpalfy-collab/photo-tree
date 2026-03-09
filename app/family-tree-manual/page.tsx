@@ -64,6 +64,7 @@ export default function FamilyTreeManualPage() {
   const cardSize = 220;
   const cardHeight = cardSize + 70;
   const edgePad = 12;
+  const [canvasSize, setCanvasSize] = useState({ w: 1600, h: 1600 });
   const [selectionRect, setSelectionRect] = useState<{
     x: number;
     y: number;
@@ -357,6 +358,15 @@ export default function FamilyTreeManualPage() {
             ...m,
             [id]: { x: clampedX, y: clampedY },
           }));
+          // slow canvas expansion when dragging near edges
+          const growPad = 80;
+          const growStep = 40;
+          if (boundsW > 0 && clampedX + cardSize > boundsW - growPad) {
+            setCanvasSize((s) => ({ w: s.w + growStep, h: s.h }));
+          }
+          if (boundsH > 0 && clampedY + cardHeight > boundsH - growPad) {
+            setCanvasSize((s) => ({ w: s.w, h: s.h + growStep }));
+          }
         }
         if (dragRef.current.groupItems) {
           const clamped = dragRef.current.groupPeople
@@ -469,7 +479,10 @@ export default function FamilyTreeManualPage() {
                     const left = pos.x;
                     const right = pos.x + cardSize;
                     const yOk = lineY >= top - tol && lineY <= bottom + tol;
-                    const xOk = lineX2 >= left - tol && lineX1 <= right + tol;
+                    const intersects = lineX1 <= right && lineX2 >= left;
+                    const touchesEdge =
+                      Math.abs(lineX2 - left) <= tol || Math.abs(lineX1 - right) <= tol;
+                    const xOk = intersects || touchesEdge;
                     if (!yOk || !xOk) return null;
                     return { id: p.id, x: pos.x, y: pos.y };
                   })
@@ -973,8 +986,8 @@ export default function FamilyTreeManualPage() {
         ref={containerRef}
         style={{
           position: "relative",
-          minHeight: "160vh",
-          minWidth: "160vw",
+          width: canvasSize.w,
+          height: canvasSize.h,
           border: "1px solid #e5e7eb",
           borderRadius: 12,
           overflow: "auto",
