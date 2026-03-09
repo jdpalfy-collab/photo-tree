@@ -64,7 +64,7 @@ export default function FamilyTreeManualPage() {
   const cardSize = 220;
   const cardHeight = cardSize + 70;
   const edgePad = 12;
-  const [canvasSize, setCanvasSize] = useState({ w: 1600, h: 1600 });
+  const [canvasSize, setCanvasSize] = useState({ w: 2400, h: 1800 });
   const [selectionRect, setSelectionRect] = useState<{
     x: number;
     y: number;
