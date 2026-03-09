@@ -59,6 +59,8 @@ export default function FamilyTreeManualPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string>("");
   const [isDirty, setIsDirty] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [layoutApplied, setLayoutApplied] = useState(false);
   const [selectionRect, setSelectionRect] = useState<{
     x: number;
     y: number;
@@ -102,13 +104,17 @@ export default function FamilyTreeManualPage() {
           if (parsed?.positions) setPositions(parsed.positions);
           if (Array.isArray(parsed?.items)) setItems(parsed.items);
           didSet = true;
+          setLayoutApplied(true);
         }
       })
       .catch(() => {
         // ignore
       })
       .finally(() => {
-        if (didSet) return;
+        if (didSet) {
+          window.setTimeout(() => setIsHydrated(true), 0);
+          return;
+        }
         const stored = window.localStorage.getItem("photoTreeManualState");
         if (stored) {
           try {
@@ -123,10 +129,15 @@ export default function FamilyTreeManualPage() {
               };
               void saveNow(latestPayloadRef.current);
             }
+            setLayoutApplied(true);
+            window.setTimeout(() => setIsHydrated(true), 0);
+            return;
           } catch {
             // ignore
           }
         }
+        // no saved layout yet; wait for initial positions
+        setLayoutApplied(false);
       });
   }, [status]);
 
@@ -160,6 +171,7 @@ export default function FamilyTreeManualPage() {
   }
 
   useEffect(() => {
+    if (!isHydrated) return;
     const payload = { positions, items };
     latestPayloadRef.current = payload;
     window.localStorage.setItem("photoTreeManualState", JSON.stringify(payload));
@@ -172,7 +184,7 @@ export default function FamilyTreeManualPage() {
     return () => {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
-  }, [positions, items]);
+  }, [positions, items, isHydrated]);
 
   useEffect(() => {
     function onVisChange() {
@@ -226,6 +238,9 @@ export default function FamilyTreeManualPage() {
         const row = Math.floor(idx / 3);
         next[p.id] = { x: col * colW, y: row * rowH };
       });
+      if (!layoutApplied) {
+        window.setTimeout(() => setIsHydrated(true), 0);
+      }
       return next;
     });
   }
