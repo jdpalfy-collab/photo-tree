@@ -90,6 +90,9 @@ export default function FamilyTreeManualPage() {
   const lastMouseRef = useRef<{ x: number; y: number } | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const latestPayloadRef = useRef<{ positions: Record<string, { x: number; y: number }>; items: Item[] } | null>(null);
+  const latestPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+  const latestItemsRef = useRef<Item[]>([]);
+  const snapTimerRef = useRef<number | null>(null);
   const selectRef = useRef<{ startX: number; startY: number; active: boolean }>({
     startX: 0,
     startY: 0,
@@ -177,6 +180,8 @@ export default function FamilyTreeManualPage() {
   useEffect(() => {
     if (!isHydrated) return;
     const payload = { positions, items };
+    latestPositionsRef.current = positions;
+    latestItemsRef.current = items;
     latestPayloadRef.current = payload;
     window.localStorage.setItem("photoTreeManualState", JSON.stringify(payload));
     setIsDirty(true);
@@ -582,6 +587,57 @@ export default function FamilyTreeManualPage() {
             });
             setActiveLineId(null);
           }
+        }
+        const lineId = dragRef.current.id;
+        const line = latestItemsRef.current.find((it) => it.id === lineId);
+        if (line && line.kind === "line" && line.lineType === "h-blue") {
+          if (snapTimerRef.current) window.clearTimeout(snapTimerRef.current);
+          snapTimerRef.current = window.setTimeout(() => {
+            const currentItems = latestItemsRef.current;
+            const currentPositions = latestPositionsRef.current;
+            const target = currentItems.find((it) => it.id === lineId);
+            if (!target || target.kind !== "line" || target.lineType !== "h-blue") return;
+            const lineY = target.y;
+            const lineX1 = target.x;
+            const lineX2 = target.x + target.length;
+            const tol = 20;
+            const candidates = people
+              .map((p) => {
+                const pos = currentPositions[p.id];
+                if (!pos) return null;
+                const top = pos.y;
+                const bottom = pos.y + cardHeight;
+                const left = pos.x;
+                const right = pos.x + cardSize;
+                const yOk = lineY >= top - tol && lineY <= bottom + tol;
+                const xOk = lineX2 >= left - tol && lineX1 <= right + tol;
+                if (!yOk || !xOk) return null;
+                return { id: p.id, x: pos.x, y: pos.y };
+              })
+              .filter(Boolean) as { id: string; x: number; y: number }[];
+
+            if (candidates.length < 2) return;
+            const sorted = candidates.sort((a, b) => a.x - b.x);
+            const leftCard = sorted[0];
+            const rightCard = sorted[sorted.length - 1];
+            const alignedY = Math.min(leftCard.y, rightCard.y);
+            const newLineX = leftCard.x + cardSize;
+            const newLen = Math.max(10, rightCard.x - newLineX);
+            const newLineY = alignedY + cardHeight / 2;
+
+            setPositions((prev) => ({
+              ...prev,
+              [leftCard.id]: { x: prev[leftCard.id].x, y: alignedY },
+              [rightCard.id]: { x: prev[rightCard.id].x, y: alignedY },
+            }));
+            setItems((prev) =>
+              prev.map((it) =>
+                it.id === lineId && it.kind === "line"
+                  ? { ...it, x: newLineX, y: newLineY, length: newLen }
+                  : it
+              )
+            );
+          }, 1200);
         }
       }
       dragRef.current = { kind: null, id: null, startX: 0, startY: 0, originX: 0, originY: 0 };
