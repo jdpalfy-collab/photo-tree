@@ -458,7 +458,7 @@ export default function FamilyTreeManualPage() {
                 const lineY = ny;
                 const lineX1 = nx;
                 const lineX2 = nx + it.length;
-                const tol = 24;
+                const tol = 40;
                 const currentPositions = latestPositionsRef.current;
                 const candidates = people
                   .map((p) => {
@@ -469,7 +469,7 @@ export default function FamilyTreeManualPage() {
                     const left = pos.x;
                     const right = pos.x + cardSize;
                     const yOk = lineY >= top - tol && lineY <= bottom + tol;
-                    const xOk = lineX2 >= left && lineX1 <= right;
+                    const xOk = lineX2 >= left - tol && lineX1 <= right + tol;
                     if (!yOk || !xOk) return null;
                     return { id: p.id, x: pos.x, y: pos.y };
                   })
