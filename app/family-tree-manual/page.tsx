@@ -591,32 +591,33 @@ export default function FamilyTreeManualPage() {
         const lineId = dragRef.current.id;
         const line = latestItemsRef.current.find((it) => it.id === lineId);
         if (line && line.kind === "line" && line.lineType === "h-blue") {
-          if (snapTimerRef.current) window.clearTimeout(snapTimerRef.current);
-          snapTimerRef.current = window.setTimeout(() => {
-            const currentItems = latestItemsRef.current;
-            const currentPositions = latestPositionsRef.current;
-            const target = currentItems.find((it) => it.id === lineId);
-            if (!target || target.kind !== "line" || target.lineType !== "h-blue") return;
-            const lineY = target.y;
-            const lineX1 = target.x;
-            const lineX2 = target.x + target.length;
-            const tol = 20;
-            const candidates = people
-              .map((p) => {
-                const pos = currentPositions[p.id];
-                if (!pos) return null;
-                const top = pos.y;
-                const bottom = pos.y + cardHeight;
-                const left = pos.x;
-                const right = pos.x + cardSize;
-                const yOk = lineY >= top - tol && lineY <= bottom + tol;
-                const xOk = lineX2 >= left - tol && lineX1 <= right + tol;
-                if (!yOk || !xOk) return null;
-                return { id: p.id, x: pos.x, y: pos.y };
-              })
-              .filter(Boolean) as { id: string; x: number; y: number }[];
+          const currentItems = latestItemsRef.current;
+          const currentPositions = latestPositionsRef.current;
+          const target = currentItems.find((it) => it.id === lineId);
+          if (!target || target.kind !== "line" || target.lineType !== "h-blue") {
+            dragRef.current = { kind: null, id: null, startX: 0, startY: 0, originX: 0, originY: 0 };
+            return;
+          }
+          const lineY = target.y;
+          const lineX1 = target.x;
+          const lineX2 = target.x + target.length;
+          const tol = 20;
+          const candidates = people
+            .map((p) => {
+              const pos = currentPositions[p.id];
+              if (!pos) return null;
+              const top = pos.y;
+              const bottom = pos.y + cardHeight;
+              const left = pos.x;
+              const right = pos.x + cardSize;
+              const yOk = lineY >= top - tol && lineY <= bottom + tol;
+              const xOk = lineX2 >= left - tol && lineX1 <= right + tol;
+              if (!yOk || !xOk) return null;
+              return { id: p.id, x: pos.x, y: pos.y };
+            })
+            .filter(Boolean) as { id: string; x: number; y: number }[];
 
-            if (candidates.length < 2) return;
+          if (candidates.length >= 2) {
             const sorted = candidates.sort((a, b) => a.x - b.x);
             const leftCard = sorted[0];
             const rightCard = sorted[sorted.length - 1];
@@ -637,7 +638,7 @@ export default function FamilyTreeManualPage() {
                   : it
               )
             );
-          }, 1200);
+          }
         }
       }
       dragRef.current = { kind: null, id: null, startX: 0, startY: 0, originX: 0, originY: 0 };
