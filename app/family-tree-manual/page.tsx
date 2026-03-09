@@ -359,8 +359,8 @@ export default function FamilyTreeManualPage() {
             [id]: { x: clampedX, y: clampedY },
           }));
           // slow canvas expansion when dragging near edges
-          const growPad = 80;
-          const growStep = 40;
+          const growPad = 160;
+          const growStep = 120;
           if (boundsW > 0 && clampedX + cardSize > boundsW - growPad) {
             setCanvasSize((s) => ({ w: s.w + growStep, h: s.h }));
           }
