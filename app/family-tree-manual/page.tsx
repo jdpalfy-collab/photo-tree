@@ -75,7 +75,7 @@ export default function FamilyTreeManualPage() {
   const dragRef = useRef<{
     kind: "person" | "line" | "heart" | null;
     id: string | null;
-    mode?: "move" | "resize-start" | "resize-end";
+    mode?: "move";
     startX: number;
     startY: number;
     originX: number;
@@ -438,10 +438,8 @@ export default function FamilyTreeManualPage() {
           return prev.map((it) => {
             if (it.id !== id || it.kind !== "line") return it;
             const isVertical = it.lineType === "v-black";
-            const mode = dragRef.current.mode || "move";
-            if (mode === "move") {
-              let nx = dragRef.current.originX + dx;
-              let ny = dragRef.current.originY + dy;
+            let nx = dragRef.current.originX + dx;
+            let ny = dragRef.current.originY + dy;
               // snap moved line by matching endpoints
               const moved = { ...it, x: nx, y: ny };
               const movedEnds = endpoints(moved);
@@ -460,7 +458,7 @@ export default function FamilyTreeManualPage() {
                 const lineY = ny;
                 const lineX1 = nx;
                 const lineX2 = nx + it.length;
-                const tol = 20;
+                const tol = 24;
                 const currentPositions = latestPositionsRef.current;
                 const candidates = people
                   .map((p) => {
@@ -471,7 +469,7 @@ export default function FamilyTreeManualPage() {
                     const left = pos.x;
                     const right = pos.x + cardSize;
                     const yOk = lineY >= top - tol && lineY <= bottom + tol;
-                    const xOk = lineX2 >= left - tol && lineX1 <= right + tol;
+                    const xOk = lineX2 >= left && lineX1 <= right;
                     if (!yOk || !xOk) return null;
                     return { id: p.id, x: pos.x, y: pos.y };
                   })
@@ -496,62 +494,6 @@ export default function FamilyTreeManualPage() {
                 }
               }
               return { ...it, x: nx, y: ny };
-            }
-            if (mode === "resize-start") {
-              if (isVertical) {
-                const newY = dragRef.current.originY + dy;
-                const newLen = (dragRef.current.originLength || it.length) - dy;
-                let ny = newY;
-                let nlen = Math.max(30, newLen);
-                const start = { x: it.x, y: ny };
-                const hit = allEndpoints.find(
-                  (p) => Math.abs(p.x - start.x) <= snapThreshold && Math.abs(p.y - start.y) <= snapThreshold
-                );
-                if (hit) {
-                  nlen = nlen + (ny - hit.y);
-                  ny = hit.y;
-                }
-                return { ...it, y: ny, length: Math.max(30, nlen) };
-              }
-              const newX = dragRef.current.originX + dx;
-              const newLen = (dragRef.current.originLength || it.length) - dx;
-              let nx = newX;
-              let nlen = Math.max(30, newLen);
-              const start = { x: nx, y: it.y };
-              const hit = allEndpoints.find(
-                (p) => Math.abs(p.x - start.x) <= snapThreshold && Math.abs(p.y - start.y) <= snapThreshold
-              );
-              if (hit) {
-                nlen = nlen + (nx - hit.x);
-                nx = hit.x;
-              }
-              return { ...it, x: nx, length: Math.max(30, nlen) };
-            }
-            if (mode === "resize-end") {
-              if (isVertical) {
-                const newLen = (dragRef.current.originLength || it.length) + dy;
-                let nlen = Math.max(30, newLen);
-                const end = { x: it.x, y: it.y + nlen };
-                const hit = allEndpoints.find(
-                  (p) => Math.abs(p.x - end.x) <= snapThreshold && Math.abs(p.y - end.y) <= snapThreshold
-                );
-                if (hit) {
-                  nlen = Math.max(30, hit.y - it.y);
-                }
-                return { ...it, length: nlen };
-              }
-              const newLen = (dragRef.current.originLength || it.length) + dx;
-              let nlen = Math.max(30, newLen);
-              const end = { x: it.x + nlen, y: it.y };
-              const hit = allEndpoints.find(
-                (p) => Math.abs(p.x - end.x) <= snapThreshold && Math.abs(p.y - end.y) <= snapThreshold
-              );
-              if (hit) {
-                nlen = Math.max(30, hit.x - it.x);
-              }
-              return { ...it, length: nlen };
-            }
-            return it;
           });
         });
         if (dragRef.current.groupPeople && dragRef.current.mode === "move") {
@@ -750,7 +692,7 @@ export default function FamilyTreeManualPage() {
     };
   }
 
-  function startDragLine(id: string, e: React.MouseEvent, mode: "move" | "resize-start" | "resize-end") {
+  function startDragLine(id: string, e: React.MouseEvent, mode: "move") {
     if (!isEditing) return;
     if (e.button === 2) return;
     e.stopPropagation();
@@ -1149,45 +1091,7 @@ export default function FamilyTreeManualPage() {
               }}
               data-draggable="true"
             >
-              {/* Resize handles (only when active) */}
-              {isActive && isEditing ? (
-                <>
-                  <div
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      startDragLine(it.id, e, "resize-start");
-                    }}
-                    style={{
-                      position: "absolute",
-                      left: isVertical ? -4 : -6,
-                      top: isVertical ? -6 : -4,
-                      width: 10,
-                      height: 10,
-                      background: "#fff",
-                      border: `2px solid ${color}`,
-                      borderRadius: 2,
-                      cursor: "nwse-resize",
-                    }}
-                  />
-                  <div
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      startDragLine(it.id, e, "resize-end");
-                    }}
-                    style={{
-                      position: "absolute",
-                      right: isVertical ? -4 : -6,
-                      bottom: isVertical ? -6 : -4,
-                      width: 10,
-                      height: 10,
-                      background: "#fff",
-                      border: `2px solid ${color}`,
-                      borderRadius: 2,
-                      cursor: "nwse-resize",
-                    }}
-                  />
-                </>
-              ) : null}
+              {/* Resize handles removed */}
             </div>
           );
         })}
