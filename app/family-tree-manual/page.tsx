@@ -61,6 +61,9 @@ export default function FamilyTreeManualPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [layoutApplied, setLayoutApplied] = useState(false);
+  const cardSize = 220;
+  const cardHeight = cardSize + 70;
+  const edgePad = 12;
   const [selectionRect, setSelectionRect] = useState<{
     x: number;
     y: number;
@@ -304,27 +307,62 @@ export default function FamilyTreeManualPage() {
       const id = dragRef.current.id;
 
       if (dragRef.current.kind === "person") {
+        const boundsW = containerRef.current?.scrollWidth ?? 0;
+        const boundsH = containerRef.current?.scrollHeight ?? 0;
+        const clampGroupDelta = (base: Record<string, { x: number; y: number }>) => {
+          if (boundsW <= 0 || boundsH <= 0) return { dx, dy };
+          let minX = Infinity;
+          let minY = Infinity;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+          Object.values(base).forEach((p) => {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x + cardSize > maxX) maxX = p.x + cardSize;
+            if (p.y + cardHeight > maxY) maxY = p.y + cardHeight;
+          });
+          if (!Number.isFinite(minX) || !Number.isFinite(minY)) return { dx, dy };
+          const minDx = edgePad - minX;
+          const maxDx = boundsW - edgePad - maxX;
+          const minDy = edgePad - minY;
+          const maxDy = boundsH - edgePad - maxY;
+          return {
+            dx: Math.min(Math.max(dx, minDx), maxDx),
+            dy: Math.min(Math.max(dy, minDy), maxDy),
+          };
+        };
+
         if (dragRef.current.groupPeople) {
+          const clamped = clampGroupDelta(dragRef.current.groupPeople);
           setPositions((m) => {
             const next = { ...m };
             Object.entries(dragRef.current.groupPeople || {}).forEach(([pid, pos]) => {
-              next[pid] = { x: pos.x + dx, y: pos.y + dy };
+              next[pid] = { x: pos.x + clamped.dx, y: pos.y + clamped.dy };
             });
             return next;
           });
         } else {
+          const nx = dragRef.current.originX + dx;
+          const ny = dragRef.current.originY + dy;
+          const clampedX =
+            boundsW > 0 ? Math.min(Math.max(nx, edgePad), boundsW - edgePad - cardSize) : nx;
+          const clampedY =
+            boundsH > 0 ? Math.min(Math.max(ny, edgePad), boundsH - edgePad - cardHeight) : ny;
           setPositions((m) => ({
             ...m,
-            [id]: { x: dragRef.current.originX + dx, y: dragRef.current.originY + dy },
+            [id]: { x: clampedX, y: clampedY },
           }));
         }
         if (dragRef.current.groupItems) {
+          const clamped = dragRef.current.groupPeople
+            ? clampGroupDelta(dragRef.current.groupPeople)
+            : { dx, dy };
           setItems((prev) =>
             prev.map((it) => {
               const base = dragRef.current.groupItems?.[it.id];
               if (!base) return it;
-              if (it.kind === "line") return { ...it, x: base.x + dx, y: base.y + dy };
-              if (it.kind === "heart") return { ...it, x: base.x + dx, y: base.y + dy };
+              if (it.kind === "line") return { ...it, x: base.x + clamped.dx, y: base.y + clamped.dy };
+              if (it.kind === "heart") return { ...it, x: base.x + clamped.dx, y: base.y + clamped.dy };
               return it;
             })
           );
@@ -743,7 +781,6 @@ export default function FamilyTreeManualPage() {
     setPositions(next);
   }
 
-  const cardSize = 220;
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const buffer = cardSize;
 
