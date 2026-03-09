@@ -744,6 +744,45 @@ export default function FamilyTreeManualPage() {
 
   const cardSize = 220;
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
+  const buffer = cardSize * 2;
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    let minX = Infinity;
+    let minY = Infinity;
+
+    Object.values(positions).forEach((p) => {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+    });
+
+    items.forEach((it) => {
+      if (it.x < minX) minX = it.x;
+      if (it.y < minY) minY = it.y;
+    });
+
+    if (!Number.isFinite(minX)) minX = 0;
+    if (!Number.isFinite(minY)) minY = 0;
+
+    const dx = minX < buffer ? buffer - minX : 0;
+    const dy = minY < buffer ? buffer - minY : 0;
+    if (dx === 0 && dy === 0) return;
+
+    setPositions((prev) => {
+      const next: Record<string, { x: number; y: number }> = {};
+      for (const [id, p] of Object.entries(prev)) {
+        next[id] = { x: p.x + dx, y: p.y + dy };
+      }
+      return next;
+    });
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        x: it.x + dx,
+        y: it.y + dy,
+      }))
+    );
+  }, [positions, items, isHydrated, buffer]);
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
