@@ -839,76 +839,72 @@ export default function FamilyTreeManualPage() {
   useEffect(() => {
     if (!isHydrated) return;
     if (autoFrameAppliedRef.current) return;
+    const hasLayout = Object.keys(positions).length > 0 || items.length > 0;
+    if (!hasLayout) return;
     autoFrameAppliedRef.current = true;
 
-    const applyFrame = () => {
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
 
-      Object.values(positions).forEach((p) => {
-        if (p.x < minX) minX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.x + cardSize > maxX) maxX = p.x + cardSize;
-        if (p.y + cardHeight > maxY) maxY = p.y + cardHeight;
-      });
+    Object.values(positions).forEach((p) => {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x + cardSize > maxX) maxX = p.x + cardSize;
+      if (p.y + cardHeight > maxY) maxY = p.y + cardHeight;
+    });
 
-      items.forEach((it) => {
-        if (it.kind === "heart") {
-          const w = 18;
-          const h = 18;
-          if (it.x < minX) minX = it.x;
-          if (it.y < minY) minY = it.y;
-          if (it.x + w > maxX) maxX = it.x + w;
-          if (it.y + h > maxY) maxY = it.y + h;
-        } else {
-          const isVertical = it.lineType === "v-black";
-          const w = isVertical ? 6 : it.length;
-          const h = isVertical ? it.length : 6;
-          if (it.x < minX) minX = it.x;
-          if (it.y < minY) minY = it.y;
-          if (it.x + w > maxX) maxX = it.x + w;
-          if (it.y + h > maxY) maxY = it.y + h;
-        }
-      });
+    items.forEach((it) => {
+      if (it.kind === "heart") {
+        const w = 18;
+        const h = 18;
+        if (it.x < minX) minX = it.x;
+        if (it.y < minY) minY = it.y;
+        if (it.x + w > maxX) maxX = it.x + w;
+        if (it.y + h > maxY) maxY = it.y + h;
+      } else {
+        const isVertical = it.lineType === "v-black";
+        const w = isVertical ? 6 : it.length;
+        const h = isVertical ? it.length : 6;
+        if (it.x < minX) minX = it.x;
+        if (it.y < minY) minY = it.y;
+        if (it.x + w > maxX) maxX = it.x + w;
+        if (it.y + h > maxY) maxY = it.y + h;
+      }
+    });
 
-      if (!Number.isFinite(minX)) minX = 0;
-      if (!Number.isFinite(minY)) minY = 0;
-      if (!Number.isFinite(maxX)) maxX = minX;
-      if (!Number.isFinite(maxY)) maxY = minY;
+    if (!Number.isFinite(minX)) minX = 0;
+    if (!Number.isFinite(minY)) minY = 0;
+    if (!Number.isFinite(maxX)) maxX = minX;
+    if (!Number.isFinite(maxY)) maxY = minY;
 
-      const neededW = Math.max(800, Math.ceil((maxX - minX) + buffer * 2));
-      const neededH = Math.max(800, Math.ceil((maxY - minY) + buffer * 2));
-      setCanvasSize((s) => ({
-        w: Math.max(s.w, neededW),
-        h: Math.max(s.h, neededH),
-      }));
+    const neededW = Math.max(800, Math.ceil((maxX - minX) + buffer * 2));
+    const neededH = Math.max(800, Math.ceil((maxY - minY) + buffer * 2));
+    setCanvasSize((s) => ({
+      w: Math.max(s.w, neededW),
+      h: Math.max(s.h, neededH),
+    }));
 
-      const dx = buffer - minX;
-      const dy = buffer - minY;
+    const dx = buffer - minX;
+    const dy = buffer - minY;
+    if (dx === 0 && dy === 0) return;
 
-      if (dx === 0 && dy === 0) return;
-
-      setPositions((prev) => {
-        const next: Record<string, { x: number; y: number }> = {};
-        for (const [id, p] of Object.entries(prev)) {
-          next[id] = { x: p.x + dx, y: p.y + dy };
-        }
-        return next;
-      });
-      setItems((prev) =>
-        prev.map((it) => ({
-          ...it,
-          x: it.x + dx,
-          y: it.y + dy,
-        }))
-      );
-    };
-
-    // run once after initial layout is in place
-    window.setTimeout(applyFrame, 0);
-  }, [isHydrated]);
+    setPositions((prev) => {
+      const next: Record<string, { x: number; y: number }> = {};
+      for (const [id, p] of Object.entries(prev)) {
+        next[id] = { x: p.x + dx, y: p.y + dy };
+      }
+      return next;
+    });
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        x: it.x + dx,
+        y: it.y + dy,
+      }))
+    );
+  }, [isHydrated, positions, items]);
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
