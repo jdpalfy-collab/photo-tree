@@ -455,6 +455,46 @@ export default function FamilyTreeManualPage() {
                   break;
                 }
               }
+              // live snap for blue horizontal line between two cards
+              if (it.lineType === "h-blue") {
+                const lineY = ny;
+                const lineX1 = nx;
+                const lineX2 = nx + it.length;
+                const tol = 20;
+                const currentPositions = latestPositionsRef.current;
+                const candidates = people
+                  .map((p) => {
+                    const pos = currentPositions[p.id];
+                    if (!pos) return null;
+                    const top = pos.y;
+                    const bottom = pos.y + cardHeight;
+                    const left = pos.x;
+                    const right = pos.x + cardSize;
+                    const yOk = lineY >= top - tol && lineY <= bottom + tol;
+                    const xOk = lineX2 >= left - tol && lineX1 <= right + tol;
+                    if (!yOk || !xOk) return null;
+                    return { id: p.id, x: pos.x, y: pos.y };
+                  })
+                  .filter(Boolean) as { id: string; x: number; y: number }[];
+                if (candidates.length >= 2) {
+                  const sorted = candidates.sort((a, b) => a.x - b.x);
+                  const leftCard = sorted[0];
+                  const rightCard = sorted[sorted.length - 1];
+                  const alignedY = Math.min(leftCard.y, rightCard.y);
+                  const newLineX = leftCard.x + cardSize;
+                  const newLen = Math.max(10, rightCard.x - newLineX);
+                  const newLineY = alignedY + cardHeight / 2;
+                  nx = newLineX;
+                  ny = newLineY;
+                  // align both cards while dragging
+                  setPositions((prevPos) => ({
+                    ...prevPos,
+                    [leftCard.id]: { x: prevPos[leftCard.id].x, y: alignedY },
+                    [rightCard.id]: { x: prevPos[rightCard.id].x, y: alignedY },
+                  }));
+                  return { ...it, x: nx, y: ny, length: newLen };
+                }
+              }
               return { ...it, x: nx, y: ny };
             }
             if (mode === "resize-start") {
