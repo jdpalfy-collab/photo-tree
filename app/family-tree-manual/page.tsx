@@ -744,28 +744,45 @@ export default function FamilyTreeManualPage() {
 
   const cardSize = 220;
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
-  const buffer = cardSize * 2;
+  const buffer = cardSize;
 
   useEffect(() => {
     if (!isHydrated) return;
     let minX = Infinity;
     let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
 
     Object.values(positions).forEach((p) => {
       if (p.x < minX) minX = p.x;
       if (p.y < minY) minY = p.y;
+      if (p.x + cardSize < maxX) {
+        // noop
+      }
+      if (p.x + cardSize > maxX) maxX = p.x + cardSize;
+      if (p.y + cardSize > maxY) maxY = p.y + cardSize;
     });
 
     items.forEach((it) => {
       if (it.x < minX) minX = it.x;
       if (it.y < minY) minY = it.y;
+      if (it.x > maxX) maxX = it.x;
+      if (it.y > maxY) maxY = it.y;
     });
 
     if (!Number.isFinite(minX)) minX = 0;
     if (!Number.isFinite(minY)) minY = 0;
+    if (!Number.isFinite(maxX)) maxX = minX;
+    if (!Number.isFinite(maxY)) maxY = minY;
 
-    const dx = minX < buffer ? buffer - minX : 0;
-    const dy = minY < buffer ? buffer - minY : 0;
+    let dx = minX < buffer ? buffer - minX : 0;
+    let dy = minY < buffer ? buffer - minY : 0;
+
+    const viewW = containerRef.current?.clientWidth ?? 0;
+    if (viewW > 0 && maxX + dx > viewW - buffer) {
+      dx -= maxX + dx - (viewW - buffer);
+    }
+
     if (dx === 0 && dy === 0) return;
 
     setPositions((prev) => {
