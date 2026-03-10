@@ -14,6 +14,7 @@ type Photo = {
   createdTime: string | null;
   createdAt: string;
   localPath?: string | null;
+  storageUrl?: string | null;
   location?: string | null;
   description?: string | null;
   rotation?: number | null;
@@ -316,7 +317,11 @@ export default function SavedPage() {
     });
 
   function viewerSrc(p: Photo) {
-    return p.localPath ? p.localPath : proxyImgUrl(p.baseUrl, p.id, 2000, 2000);
+    return p.storageUrl
+      ? p.storageUrl
+      : p.localPath
+      ? p.localPath
+      : proxyImgUrl(p.baseUrl, p.id, 2000, 2000);
   }
 
   useEffect(() => {
@@ -411,7 +416,9 @@ export default function SavedPage() {
           }}
         >
           {displayPhotos.map((p, idx) => {
-            const imgSrc = p.localPath
+            const imgSrc = p.storageUrl
+              ? p.storageUrl
+              : p.localPath
               ? p.localPath
               : proxyImgUrl(p.baseUrl, p.id, 800, 800);
             const created = p.createdTime ? new Date(p.createdTime).toISOString().slice(0, 10) : "";

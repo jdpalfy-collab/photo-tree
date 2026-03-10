@@ -21,6 +21,7 @@ type Photo = {
   id: string;
   baseUrl: string;
   localPath?: string | null;
+  storageUrl?: string | null;
   mimeType: string;
   createdTime: string | null;
   rotation?: number | null;
@@ -113,12 +114,20 @@ export default function PeoplePage() {
     if (!profilePhotoId) return "";
     const cached = profilePhotos[personId];
     if (cached?.id === profilePhotoId) {
-      return cached.localPath ? cached.localPath : proxyImgUrl(cached.baseUrl, cached.id);
+      return cached.storageUrl
+        ? cached.storageUrl
+        : cached.localPath
+        ? cached.localPath
+        : proxyImgUrl(cached.baseUrl, cached.id);
     }
     const photos = photosByPerson[personId] || [];
     const match = photos.find((p) => p.id === profilePhotoId);
     if (!match) return "";
-    return match.localPath ? match.localPath : proxyImgUrl(match.baseUrl, match.id);
+    return match.storageUrl
+      ? match.storageUrl
+      : match.localPath
+      ? match.localPath
+      : proxyImgUrl(match.baseUrl, match.id);
   }
 
   function displayName(p: Person) {
@@ -647,7 +656,11 @@ export default function PeoplePage() {
                         }}
                       >
                         {(photosByPerson[p.id] || []).map((ph) => {
-                          const src = ph.localPath ? ph.localPath : proxyImgUrl(ph.baseUrl, ph.id);
+                          const src = ph.storageUrl
+                            ? ph.storageUrl
+                            : ph.localPath
+                            ? ph.localPath
+                            : proxyImgUrl(ph.baseUrl, ph.id);
                           const isProfile = p.profilePhotoId === ph.id;
                           return (
                             <button

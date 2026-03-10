@@ -7,19 +7,20 @@ export async function GET() {
     const photos = await prisma.photo.findMany({
       orderBy: { createdAt: "desc" },
       take: 200,
-      select: {
-        id: true,
-        baseUrl: true,
-        mimeType: true,
-        width: true,
-        height: true,
-        createdTime: true,
-        createdAt: true,
-        localPath: true,
-        location: true,
-        description: true,
-        rotation: true,
-      },
+        select: {
+          id: true,
+          baseUrl: true,
+          mimeType: true,
+          width: true,
+          height: true,
+          createdTime: true,
+          createdAt: true,
+          localPath: true,
+          storageUrl: true,
+          location: true,
+          description: true,
+          rotation: true,
+        },
     });
 
     return NextResponse.json({ ok: true, photos });

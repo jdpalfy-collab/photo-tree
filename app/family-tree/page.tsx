@@ -20,6 +20,7 @@ type Photo = {
   id: string;
   baseUrl: string;
   localPath?: string | null;
+  storageUrl?: string | null;
   mimeType: string;
   createdTime: string | null;
   rotation?: number | null;
@@ -617,7 +618,9 @@ export default function FamilyTreePage() {
                   ? photos.find((p) => p.id === person.profilePhotoId)
                   : null) || photos[0];
               const profileSrc = profile
-                ? profile.localPath
+                ? profile.storageUrl
+                  ? profile.storageUrl
+                  : profile.localPath
                   ? profile.localPath
                   : proxyImgUrl(profile.baseUrl, profile.id, 300, 300)
                 : "";

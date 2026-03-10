@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getToken } from "next-auth/jwt";
-import fs from "fs/promises";
-import path from "path";
+import { put } from "@vercel/blob";
 
 function extFromMime(mimeType?: string) {
   if (!mimeType) return "jpg";
@@ -47,48 +46,37 @@ export async function POST(req: Request) {
     const accessToken = (token as any)?.accessToken as string | undefined;
 
     const candidates = await prisma.photo.findMany({
-      select: { id: true, baseUrl: true, mimeType: true, localPath: true },
+      select: { id: true, baseUrl: true, mimeType: true, storageUrl: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
 
     let cached = 0;
-    const publicDir = path.join(process.cwd(), "public", "photos");
-    await fs.mkdir(publicDir, { recursive: true });
 
     for (const p of candidates) {
       const baseUrl = p.baseUrl || "";
 
-      const fileExt = extFromMime(p.mimeType || "");
-      const localFilename = `${p.id}.${fileExt}`;
-      const localFsPath = path.join(publicDir, localFilename);
-      const localPath = `/photos/${localFilename}`;
-
       try {
-        let exists = true;
-        await fs.access(localFsPath).catch(() => {
-          exists = false;
-        });
-
-        if (!exists) {
-          if (!baseUrl) continue;
-          const sized = baseUrl.includes("=")
-            ? baseUrl.replace(/=.*/, "=w2400-h2400")
-            : `${baseUrl}=w2400-h2400`;
-          const bytes = await fetchImageBytes(sized, accessToken);
-          if (bytes) {
-            await fs.writeFile(localFsPath, bytes);
-            exists = true;
-          }
-        }
-
-        if (exists) {
-          await prisma.photo.update({
-            where: { id: p.id },
-            data: { localPath },
-          });
+        if (!baseUrl) continue;
+        if (p.storageUrl) {
           cached += 1;
+          continue;
         }
+        const sized = baseUrl.includes("=")
+          ? baseUrl.replace(/=.*/, "=w2400-h2400")
+          : `${baseUrl}=w2400-h2400`;
+        const bytes = await fetchImageBytes(sized, accessToken);
+        if (!bytes) continue;
+        const fileExt = extFromMime(p.mimeType || "");
+        const blob = await put(`photos/${p.id}.${fileExt}`, bytes, {
+          access: "public",
+          contentType: p.mimeType || "image/jpeg",
+        });
+        await prisma.photo.update({
+          where: { id: p.id },
+          data: { storageUrl: blob.url },
+        });
+        cached += 1;
       } catch {
         // continue
       }

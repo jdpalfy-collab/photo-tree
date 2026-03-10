@@ -2,8 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getToken } from "next-auth/jwt";
-import fs from "fs/promises";
-import path from "path";
+import { put } from "@vercel/blob";
 
 type MediaItem = {
   id: string;
@@ -135,30 +134,23 @@ export async function POST(req: Request) {
       const baseUrl = it.mediaFile?.baseUrl || "";
       const mimeType = it.mediaFile?.mimeType || "";
       const fileExt = extFromMime(mimeType);
-      const publicDir = path.join(process.cwd(), "public", "photos");
-      const localFilename = `${it.id}.${fileExt}`;
-      const localFsPath = path.join(publicDir, localFilename);
-      const localPath = `/photos/${localFilename}`;
-      let finalLocalPath: string | null = null;
-
+      let storageUrl: string | null = null;
       try {
-        await fs.mkdir(publicDir, { recursive: true });
-        // Only download if not already cached
-        await fs.access(localFsPath).catch(async () => {
-          if (baseUrl) {
-            const sized = baseUrl.includes("=")
-              ? baseUrl.replace(/=.*/, "=w2400-h2400")
-              : `${baseUrl}=w2400-h2400`;
-            const bytes = await fetchImageBytes(sized, accessToken);
-            if (bytes) {
-              await fs.writeFile(localFsPath, bytes);
-            }
+        if (baseUrl) {
+          const sized = baseUrl.includes("=")
+            ? baseUrl.replace(/=.*/, "=w2400-h2400")
+            : `${baseUrl}=w2400-h2400`;
+          const bytes = await fetchImageBytes(sized, accessToken);
+          if (bytes) {
+            const blob = await put(`photos/${it.id}.${fileExt}`, bytes, {
+              access: "public",
+              contentType: mimeType || "image/jpeg",
+            });
+            storageUrl = blob.url;
           }
-        });
-        await fs.access(localFsPath);
-        finalLocalPath = localPath;
+        }
       } catch {
-        // If local caching fails, continue without it.
+        // continue without storage url
       }
 
       const metaForPhoto = meta[it.id] || {};
@@ -190,7 +182,7 @@ export async function POST(req: Request) {
           width: it.mediaFile?.mediaFileMetadata?.width ?? null,
           height: it.mediaFile?.mediaFileMetadata?.height ?? null,
           createdTime,
-          localPath: finalLocalPath,
+          storageUrl,
           location,
           description,
         },
@@ -200,7 +192,7 @@ export async function POST(req: Request) {
           width: it.mediaFile?.mediaFileMetadata?.width ?? null,
           height: it.mediaFile?.mediaFileMetadata?.height ?? null,
           createdTime,
-          localPath: finalLocalPath,
+          storageUrl: storageUrl ?? undefined,
           location,
           description,
         },

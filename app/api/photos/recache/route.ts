@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getToken } from "next-auth/jwt";
-import fs from "fs/promises";
-import path from "path";
+import { put } from "@vercel/blob";
 
 function extFromMime(mimeType?: string) {
   if (!mimeType) return "jpg";
@@ -67,12 +66,6 @@ export async function POST(req: Request) {
     }
 
     const fileExt = extFromMime(photo.mimeType || "");
-    const publicDir = path.join(process.cwd(), "public", "photos");
-    const localFilename = `${photo.id}.${fileExt}`;
-    const localFsPath = path.join(publicDir, localFilename);
-    const localPath = `/photos/${localFilename}`;
-
-    await fs.mkdir(publicDir, { recursive: true });
 
     const sized = baseUrl.includes("=")
       ? baseUrl.replace(/=.*/, "=w2400-h2400")
@@ -82,14 +75,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "download failed" }, { status: 502 });
     }
 
-    await fs.writeFile(localFsPath, bytes);
+    const blob = await put(`photos/${photo.id}.${fileExt}`, bytes, {
+      access: "public",
+      contentType: photo.mimeType || "image/jpeg",
+    });
 
     await prisma.photo.update({
       where: { id: photo.id },
-      data: { localPath },
+      data: { storageUrl: blob.url },
     });
 
-    return NextResponse.json({ ok: true, localPath });
+    return NextResponse.json({ ok: true, storageUrl: blob.url });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: String(e?.message || e) },

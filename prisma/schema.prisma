@@ -18,6 +18,7 @@ model Photo {
   createdTime DateTime?
   createdAt   DateTime @default(now())
   localPath   String?
+  storageUrl  String?
   location    String?
   description String?
   rotation    Int?

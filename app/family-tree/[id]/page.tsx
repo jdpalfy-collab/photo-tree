@@ -21,6 +21,7 @@ type Photo = {
   id: string;
   baseUrl: string;
   localPath?: string | null;
+  storageUrl?: string | null;
   mimeType: string;
   createdTime: string | null;
   location?: string | null;
@@ -344,7 +345,9 @@ export default function PersonPhotosPage() {
               const profile =
                 photos.find((p) => p.id === person.profilePhotoId) || photos[0];
               const src = profile
-                ? profile.localPath
+                ? profile.storageUrl
+                  ? profile.storageUrl
+                  : profile.localPath
                   ? profile.localPath
                   : proxyImgUrl(profile.baseUrl, profile.id, 300, 300)
                 : "";
@@ -465,7 +468,11 @@ export default function PersonPhotosPage() {
           {(() => {
             const filtered = filteredPhotos();
             return filtered.map((p, idx) => {
-              const src = p.localPath ? p.localPath : proxyImgUrl(p.baseUrl, p.id, 800, 800);
+              const src = p.storageUrl
+                ? p.storageUrl
+                : p.localPath
+                ? p.localPath
+                : proxyImgUrl(p.baseUrl, p.id, 800, 800);
               const created = p.createdTime ? new Date(p.createdTime).toISOString().slice(0, 10) : "";
               const createdYear = created ? created.slice(0, 4) : "";
               const thisName = displayName(person);
@@ -603,7 +610,11 @@ export default function PersonPhotosPage() {
                 .sort((a, b) => a.localeCompare(b))
                 .join(", ");
               const tagIds = new Set((p.tags || []).map((t) => t.person?.id).filter(Boolean));
-              const imgSrc = p.localPath ? p.localPath : proxyImgUrl(p.baseUrl, p.id, 1200, 1200);
+              const imgSrc = p.storageUrl
+                ? p.storageUrl
+                : p.localPath
+                ? p.localPath
+                : proxyImgUrl(p.baseUrl, p.id, 1200, 1200);
 
               return (
                 <div style={{ display: "grid", gap: 12 }}>
@@ -868,7 +879,11 @@ export default function PersonPhotosPage() {
         const filtered = filteredPhotos();
 
         const viewerSrc = (p: Photo) =>
-          p.localPath ? p.localPath : proxyImgUrl(p.baseUrl, p.id, 2000, 2000);
+          p.storageUrl
+            ? p.storageUrl
+            : p.localPath
+            ? p.localPath
+            : proxyImgUrl(p.baseUrl, p.id, 2000, 2000);
 
         return viewerOpen && filtered[viewerIndex] ? (
           <div
