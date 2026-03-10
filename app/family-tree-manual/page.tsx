@@ -859,16 +859,12 @@ export default function FamilyTreeManualPage() {
       if (it.kind === "heart") {
         const w = 18;
         const h = 18;
-        if (it.x < minX) minX = it.x;
-        if (it.y < minY) minY = it.y;
         if (it.x + w > maxX) maxX = it.x + w;
         if (it.y + h > maxY) maxY = it.y + h;
       } else {
         const isVertical = it.lineType === "v-black";
         const w = isVertical ? 6 : it.length;
         const h = isVertical ? it.length : 6;
-        if (it.x < minX) minX = it.x;
-        if (it.y < minY) minY = it.y;
         if (it.x + w > maxX) maxX = it.x + w;
         if (it.y + h > maxY) maxY = it.y + h;
       }
