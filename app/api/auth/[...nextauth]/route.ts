@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
 const handler = NextAuth({
+  session: { strategy: "jwt" },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -22,6 +23,9 @@ const handler = NextAuth({
       // First time user signs in, persist the access_token to the token
       if (account?.access_token) {
         token.accessToken = account.access_token;
+      }
+      if (account?.refresh_token) {
+        token.refreshToken = account.refresh_token;
       }
       return token;
     },
