@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 
 type PickerSession = {
@@ -49,6 +49,7 @@ function normalizeBaseUrl(baseUrl?: string) {
 function proxyImgUrl(baseUrl?: string, photoId?: string, w = 600, h = 600) {
   const b = normalizeBaseUrl(baseUrl);
   if (!b) return "";
+  if (!b.includes("googleusercontent.com")) return b;
   // IMPORTANT: We load images through our server proxy route so the browser never hits googleusercontent directly.
   // Your proxy route should be: app/api/photos/image/route.ts
   const idParam = photoId ? `&photoId=${encodeURIComponent(photoId)}` : "";
@@ -75,6 +76,13 @@ export default function PickerPage() {
   const [log, setLog] = useState<string>("(logs will appear here)");
   const [busy, setBusy] = useState(false);
   const [savedToDb, setSavedToDb] = useState(false);
+  const [deviceBusy, setDeviceBusy] = useState(false);
+  const [newPersonDraft, setNewPersonDraft] = useState<{ firstName: string; lastName: string; birthYear: string }>({
+    firstName: "",
+    lastName: "",
+    birthYear: "",
+  });
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedCount = useMemo(() => items.length, [items]);
 
@@ -358,6 +366,71 @@ export default function PickerPage() {
     return full || p.name;
   }
 
+  async function addNewPersonFromImport(photoId: string) {
+    const firstName = newPersonDraft.firstName.trim();
+    const lastName = newPersonDraft.lastName.trim();
+    if (!firstName || !lastName) return;
+    const birthYear = newPersonDraft.birthYear.trim();
+    const res = await fetch("/api/people", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ firstName, lastName, birthYear }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      appendLog(`Failed to add person: ${data?.error || res.statusText}`);
+      return;
+    }
+    const newPerson = data?.person as Person;
+    if (newPerson?.id) {
+      setPeople((prev) => [...prev, newPerson]);
+      setMetaById((m) => ({
+        ...m,
+        [photoId]: {
+          ...m[photoId],
+          personIds: Array.from(new Set([...(m[photoId]?.personIds || []), newPerson.id])),
+        },
+      }));
+      if (savedToDb) {
+        void addTagToDb(photoId, newPerson.id);
+      }
+      setNewPersonDraft({ firstName: "", lastName: "", birthYear: "" });
+    }
+  }
+
+  async function importFromDevice(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setDeviceBusy(true);
+    try {
+      const form = new FormData();
+      Array.from(files).forEach((f) => form.append("files", f));
+      const res = await fetch("/api/photos/import-device", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        appendLog(`Device import failed: ${data?.error || res.statusText}`);
+        return;
+      }
+      const newItems = Array.isArray(data?.items) ? data.items : [];
+      const mapped: MediaItem[] = newItems.map((it: any) => ({
+        id: it.id,
+        createTime: it.createdTime,
+        type: "PHOTO",
+        mediaFile: {
+          baseUrl: it.storageUrl,
+          mimeType: it.mimeType,
+          mediaFileMetadata: {},
+        },
+      }));
+      setItems((prev) => mergeItems(prev, mapped));
+      setSavedToDb(true);
+    } finally {
+      setDeviceBusy(false);
+    }
+  }
+
   return (
     <main style={{ padding: 24, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" }}>
       <h1 style={{ margin: 0 }}>Import</h1>
@@ -368,6 +441,29 @@ export default function PickerPage() {
             <button onClick={createPickerSession} disabled={busy} style={{ padding: "8px 12px" }}>
               Import From Google Photos
             </button>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                ref={fileInputRef}
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files && files.length > 0) {
+                    void importFromDevice(files);
+                  }
+                  e.currentTarget.value = "";
+                }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={deviceBusy}
+                style={{ padding: "8px 12px" }}
+              >
+                {deviceBusy ? "Importing…" : "Import From Device"}
+              </button>
+            </label>
 
             {items.length > 0 ? (
               <button onClick={saveSelectedToDb} disabled={busy || !sessionId} style={{ padding: "8px 12px" }}>
@@ -453,9 +549,7 @@ export default function PickerPage() {
                     justifyContent: "space-between",
                   }}
                 >
-                  <div style={{ textAlign: "center", minHeight: 26 }}>
-                    {description ? <i>“{description}”</i> : null}
-                  </div>
+                  <div style={{ textAlign: "center", minHeight: 26 }}>{description ? <i>“{description}”</i> : null}</div>
                   <div style={{ textAlign: "right" }}>
                     {location || year ? (
                       <div>
@@ -506,9 +600,9 @@ export default function PickerPage() {
               background: "#fff",
               borderRadius: 12,
               padding: 16,
-              maxWidth: 720,
-              width: "90vw",
-              maxHeight: "90vh",
+              width: "92vw",
+              maxWidth: 1100,
+              height: "90vh",
               overflow: "auto",
               border: "2px solid #cfe4ff",
             }}
@@ -566,11 +660,22 @@ export default function PickerPage() {
                     </div>
                   </div>
                   {imgSrc ? (
-                    <img
-                      src={imgSrc}
-                      alt={it.id}
-                      style={{ width: "100%", maxHeight: 420, objectFit: "contain", borderRadius: 10 }}
-                    />
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "60vh",
+                        borderRadius: 10,
+                        overflow: "hidden",
+                        background: "#f8fafc",
+                        border: "2px solid #e2e8f0",
+                      }}
+                    >
+                      <img
+                        src={imgSrc}
+                        alt={it.id}
+                        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                      />
+                    </div>
                   ) : null}
                   <div style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
                     {description ? (
@@ -730,6 +835,35 @@ export default function PickerPage() {
                           })}
                         </div>
                       )}
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e5e7eb" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Add new person</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <input
+                            placeholder="First name"
+                            value={newPersonDraft.firstName}
+                            onChange={(e) => setNewPersonDraft((d) => ({ ...d, firstName: e.target.value }))}
+                            style={{ fontSize: 10, padding: "3px 6px", width: 120 }}
+                          />
+                          <input
+                            placeholder="Last name"
+                            value={newPersonDraft.lastName}
+                            onChange={(e) => setNewPersonDraft((d) => ({ ...d, lastName: e.target.value }))}
+                            style={{ fontSize: 10, padding: "3px 6px", width: 120 }}
+                          />
+                          <input
+                            placeholder="Birth year"
+                            value={newPersonDraft.birthYear}
+                            onChange={(e) => setNewPersonDraft((d) => ({ ...d, birthYear: e.target.value }))}
+                            style={{ fontSize: 10, padding: "3px 6px", width: 90 }}
+                          />
+                          <button
+                            onClick={() => addNewPersonFromImport(it.id)}
+                            style={{ fontSize: 10, padding: "3px 6px", minWidth: 90 }}
+                          >
+                            Add person
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ) : null}
                   {dateDrafts[it.id] !== undefined ? (

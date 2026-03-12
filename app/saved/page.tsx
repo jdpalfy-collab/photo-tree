@@ -539,19 +539,33 @@ export default function SavedPage() {
             padding: 24,
           }}
         >
-          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "95vw", maxHeight: "90vh" }}>
-            <img
-              src={viewerSrc(displayPhotos[viewerIndex])}
-              alt={displayPhotos[viewerIndex].id}
+          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "92vw", maxWidth: 1100, height: "90vh" }}>
+            <div
               style={{
-                maxWidth: "95vw",
-                maxHeight: "90vh",
-                objectFit: "contain",
-                display: "block",
-                transformOrigin: "center",
-                transform: `rotate(${displayPhotos[viewerIndex].rotation ?? 0}deg)`,
+                width: "100%",
+                height: "88vh",
+                borderRadius: 10,
+                overflow: "hidden",
+                background: "#0f172a",
+                border: "2px solid #1e293b",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
-            />
+            >
+              <img
+                src={viewerSrc(displayPhotos[viewerIndex])}
+                alt={displayPhotos[viewerIndex].id}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  display: "block",
+                  transformOrigin: "center",
+                  transform: `rotate(${displayPhotos[viewerIndex].rotation ?? 0}deg)`,
+                }}
+              />
+            </div>
             <button
               onClick={() => setViewerOpen(false)}
               style={{ position: "absolute", top: -8, right: -8, fontSize: 12 }}
@@ -596,9 +610,9 @@ export default function SavedPage() {
               background: "#fff",
               borderRadius: 12,
               padding: 16,
-              maxWidth: 720,
-              width: "90vw",
-              maxHeight: "90vh",
+              width: "92vw",
+              maxWidth: 1100,
+              height: "90vh",
               overflow: "auto",
               border: "2px solid #cfe4ff",
             }}
@@ -629,18 +643,29 @@ export default function SavedPage() {
                       Close
                     </button>
                   </div>
-                  <img
-                    src={viewerSrc(p)}
-                    alt={p.id}
+                  <div
                     style={{
                       width: "100%",
-                      maxHeight: 420,
-                      objectFit: "contain",
+                      height: "60vh",
                       borderRadius: 10,
-                      transformOrigin: "center",
-                      transform: `rotate(${p.rotation ?? 0}deg)`,
+                      overflow: "hidden",
+                      background: "#f8fafc",
+                      border: "2px solid #e2e8f0",
                     }}
-                  />
+                  >
+                    <img
+                      src={viewerSrc(p)}
+                      alt={p.id}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        display: "block",
+                        transformOrigin: "center",
+                        transform: `rotate(${p.rotation ?? 0}deg)`,
+                      }}
+                    />
+                  </div>
                   <div style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
                     {p.description ? (
                       <div>

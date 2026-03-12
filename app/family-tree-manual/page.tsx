@@ -65,6 +65,7 @@ export default function FamilyTreeManualPage() {
   const cardSize = 220;
   const cardHeight = cardSize + 70;
   const edgePad = 12;
+  const lineThickness = 4;
   const [canvasSize, setCanvasSize] = useState({ w: 2400, h: 1800 });
   const [selectionRect, setSelectionRect] = useState<{
     x: number;
@@ -311,6 +312,9 @@ export default function FamilyTreeManualPage() {
       if (!dragRef.current.kind || !dragRef.current.id) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
+      const step = 10;
+      const qdx = Math.round(dx / step) * step;
+      const qdy = Math.round(dy / step) * step;
       const id = dragRef.current.id;
 
       if (dragRef.current.kind === "person") {
@@ -334,8 +338,8 @@ export default function FamilyTreeManualPage() {
           const minDy = edgePad - minY;
           const maxDy = boundsH - edgePad - maxY;
           return {
-            dx: Math.min(Math.max(dx, minDx), maxDx),
-            dy: Math.min(Math.max(dy, minDy), maxDy),
+            dx: Math.min(Math.max(qdx, minDx), maxDx),
+            dy: Math.min(Math.max(qdy, minDy), maxDy),
           };
         };
 
@@ -349,8 +353,8 @@ export default function FamilyTreeManualPage() {
             return next;
           });
         } else {
-          const nx = dragRef.current.originX + dx;
-          const ny = dragRef.current.originY + dy;
+          const nx = dragRef.current.originX + qdx;
+          const ny = dragRef.current.originY + qdy;
           const clampedX =
             boundsW > 0 ? Math.min(Math.max(nx, edgePad), boundsW - edgePad - cardSize) : nx;
           const clampedY =
@@ -372,7 +376,7 @@ export default function FamilyTreeManualPage() {
         if (dragRef.current.groupItems) {
           const clamped = dragRef.current.groupPeople
             ? clampGroupDelta(dragRef.current.groupPeople)
-            : { dx, dy };
+            : { dx: qdx, dy: qdy };
           setItems((prev) =>
             prev.map((it) => {
               const base = dragRef.current.groupItems?.[it.id];
@@ -392,8 +396,8 @@ export default function FamilyTreeManualPage() {
             prev.map((it) => {
               const base = dragRef.current.groupItems?.[it.id];
               if (!base) return it;
-              if (it.kind === "heart") return { ...it, x: base.x + dx, y: base.y + dy };
-              if (it.kind === "line") return { ...it, x: base.x + dx, y: base.y + dy };
+              if (it.kind === "heart") return { ...it, x: base.x + qdx, y: base.y + qdy };
+              if (it.kind === "line") return { ...it, x: base.x + qdx, y: base.y + qdy };
               return it;
             })
           );
@@ -401,7 +405,7 @@ export default function FamilyTreeManualPage() {
           setItems((prev) =>
             prev.map((it) =>
               it.id === id && it.kind === "heart"
-                ? { ...it, x: dragRef.current.originX + dx, y: dragRef.current.originY + dy }
+                ? { ...it, x: dragRef.current.originX + qdx, y: dragRef.current.originY + qdy }
                 : it
             )
           );
@@ -410,7 +414,7 @@ export default function FamilyTreeManualPage() {
           setPositions((m) => {
             const next = { ...m };
             Object.entries(dragRef.current.groupPeople || {}).forEach(([pid, pos]) => {
-              next[pid] = { x: pos.x + dx, y: pos.y + dy };
+              next[pid] = { x: pos.x + qdx, y: pos.y + qdy };
             });
             return next;
           });
@@ -441,16 +445,16 @@ export default function FamilyTreeManualPage() {
             return prev.map((it) => {
               const base = dragRef.current.groupItems?.[it.id];
               if (!base) return it;
-              if (it.kind === "line") return { ...it, x: base.x + dx, y: base.y + dy };
-              if (it.kind === "heart") return { ...it, x: base.x + dx, y: base.y + dy };
+              if (it.kind === "line") return { ...it, x: base.x + qdx, y: base.y + qdy };
+              if (it.kind === "heart") return { ...it, x: base.x + qdx, y: base.y + qdy };
               return it;
             });
           }
           return prev.map((it) => {
             if (it.id !== id || it.kind !== "line") return it;
             const isVertical = it.lineType === "v-black";
-            let nx = dragRef.current.originX + dx;
-            let ny = dragRef.current.originY + dy;
+            let nx = dragRef.current.originX + qdx;
+            let ny = dragRef.current.originY + qdy;
               // snap moved line by matching endpoints
               const moved = { ...it, x: nx, y: ny };
               const movedEnds = endpoints(moved);
@@ -514,7 +518,7 @@ export default function FamilyTreeManualPage() {
           setPositions((m) => {
             const next = { ...m };
             Object.entries(dragRef.current.groupPeople || {}).forEach(([pid, pos]) => {
-              next[pid] = { x: pos.x + dx, y: pos.y + dy };
+              next[pid] = { x: pos.x + qdx, y: pos.y + qdy };
             });
             return next;
           });
@@ -549,8 +553,8 @@ export default function FamilyTreeManualPage() {
               if (inRect(it.x, it.y, 18, 18)) nextItems.add(it.id);
             } else {
               const isVertical = it.lineType === "v-black";
-              const bw = isVertical ? 6 : it.length;
-              const bh = isVertical ? it.length : 6;
+              const bw = isVertical ? lineThickness : it.length;
+              const bh = isVertical ? it.length : lineThickness;
               if (inRect(it.x, it.y, bw, bh)) nextItems.add(it.id);
             }
           });
@@ -864,8 +868,8 @@ export default function FamilyTreeManualPage() {
         if (it.y + h > maxY) maxY = it.y + h;
       } else {
         const isVertical = it.lineType === "v-black";
-        const w = isVertical ? 6 : it.length;
-        const h = isVertical ? it.length : 6;
+        const w = isVertical ? lineThickness : it.length;
+        const h = isVertical ? it.length : lineThickness;
         if (it.x + w > maxX) maxX = it.x + w;
         if (it.y + h > maxY) maxY = it.y + h;
       }
@@ -1090,7 +1094,7 @@ export default function FamilyTreeManualPage() {
 
           const isVertical = it.lineType === "v-black";
           const isBlue = it.lineType === "h-blue";
-          const thickness = 4;
+          const thickness = lineThickness;
           const color = isBlue ? "#2563eb" : "#111827";
           const isActive = activeLineId === it.id;
           return (
