@@ -12,30 +12,40 @@ function extFromMime(mimeType?: string) {
 }
 
 async function fetchImageBytes(urlToFetch: string, accessToken?: string) {
-  const primary = await fetch(urlToFetch, {
-    headers: {
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      Accept: "image/*",
-    },
+  // Try without auth first (googleusercontent often rejects Authorization)
+  const noAuth = await fetch(urlToFetch, {
+    headers: { Accept: "image/*" },
     cache: "no-store",
   });
-
-  if (primary.ok) {
-    return { ok: true, status: primary.status, bytes: Buffer.from(await primary.arrayBuffer()) };
+  if (noAuth.ok) {
+    return {
+      ok: true,
+      status: noAuth.status,
+      bytes: Buffer.from(await noAuth.arrayBuffer()),
+      source: "noauth",
+    };
   }
 
   if (accessToken) {
-    const retry = await fetch(urlToFetch, {
-      headers: { Accept: "image/*" },
+    const authed = await fetch(urlToFetch, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "image/*",
+      },
       cache: "no-store",
     });
-    if (retry.ok) {
-      return { ok: true, status: retry.status, bytes: Buffer.from(await retry.arrayBuffer()) };
+    if (authed.ok) {
+      return {
+        ok: true,
+        status: authed.status,
+        bytes: Buffer.from(await authed.arrayBuffer()),
+        source: "auth",
+      };
     }
-    return { ok: false, status: retry.status, bytes: null };
+    return { ok: false, status: authed.status, bytes: null, source: "auth" };
   }
 
-  return { ok: false, status: primary.status, bytes: null };
+  return { ok: false, status: noAuth.status, bytes: null, source: "noauth" };
 }
 
 export async function POST(req: Request) {
@@ -75,10 +85,13 @@ export async function POST(req: Request) {
     let alreadyStored = 0;
     let fetchFailed = 0;
     let uploadFailed = 0;
+    let metaFailed = 0;
     const failures: { id: string; reason: string; status?: number }[] = [];
 
     for (const p of candidates) {
         let baseUrl = p.baseUrl || "";
+        let metaStatus: number | undefined;
+        let metaError: string | undefined;
 
         // Refresh baseUrl from Google Photos in case stored baseUrl expired
         if (accessToken) {
@@ -90,6 +103,7 @@ export async function POST(req: Request) {
                 cache: "no-store",
               }
             );
+            metaStatus = metaRes.status;
             if (metaRes.ok) {
               const meta = await metaRes.json().catch(() => ({}));
               const fresh = typeof meta?.baseUrl === "string" ? meta.baseUrl : "";
@@ -102,6 +116,10 @@ export async function POST(req: Request) {
                   });
                 }
               }
+            } else {
+              metaFailed += 1;
+              const txt = await metaRes.text().catch(() => "");
+              metaError = txt.slice(0, 200);
             }
           } catch {
             // ignore meta refresh errors
@@ -124,7 +142,14 @@ export async function POST(req: Request) {
         const fetched = await fetchImageBytes(sized, accessToken);
         if (!fetched.ok || !fetched.bytes) {
           fetchFailed += 1;
-          failures.push({ id: p.id, reason: "fetch_failed", status: fetched.status });
+          failures.push({
+            id: p.id,
+            reason: "fetch_failed",
+            status: fetched.status,
+            metaStatus,
+            metaError,
+            source: fetched.source,
+          } as any);
           continue;
         }
         const fileExt = extFromMime(p.mimeType || "");
@@ -155,6 +180,7 @@ export async function POST(req: Request) {
       missingBaseUrl,
       fetchFailed,
       uploadFailed,
+      metaFailed,
       failures: failures.slice(0, 10),
       tokenInfoStatus,
       tokenInfoScope,
