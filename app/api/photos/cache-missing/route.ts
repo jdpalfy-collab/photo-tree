@@ -45,6 +45,24 @@ export async function POST(req: Request) {
       secret: process.env.NEXTAUTH_SECRET,
     });
     const accessToken = (token as any)?.accessToken as string | undefined;
+    let tokenInfoStatus: number | null = null;
+    let tokenInfoScope: string | null = null;
+    if (accessToken) {
+      try {
+        const infoResp = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(
+            accessToken
+          )}`,
+          { cache: "no-store" }
+        );
+        tokenInfoStatus = infoResp.status;
+        const infoText = await infoResp.text();
+        const infoJson = JSON.parse(infoText);
+        tokenInfoScope = typeof infoJson?.scope === "string" ? infoJson.scope : null;
+      } catch {
+        // ignore
+      }
+    }
 
     const candidates = await prisma.photo.findMany({
       select: { id: true, baseUrl: true, mimeType: true, storageUrl: true },
@@ -110,6 +128,8 @@ export async function POST(req: Request) {
       fetchFailed,
       uploadFailed,
       failures: failures.slice(0, 10),
+      tokenInfoStatus,
+      tokenInfoScope,
     });
   } catch (e: any) {
     return NextResponse.json(
