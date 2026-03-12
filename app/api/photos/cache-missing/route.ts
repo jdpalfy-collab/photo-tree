@@ -78,9 +78,37 @@ export async function POST(req: Request) {
     const failures: { id: string; reason: string; status?: number }[] = [];
 
     for (const p of candidates) {
-      const baseUrl = p.baseUrl || "";
+        let baseUrl = p.baseUrl || "";
 
-      try {
+        // Refresh baseUrl from Google Photos in case stored baseUrl expired
+        if (accessToken) {
+          try {
+            const metaRes = await fetch(
+              `https://photoslibrary.googleapis.com/v1/mediaItems/${encodeURIComponent(p.id)}`,
+              {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                cache: "no-store",
+              }
+            );
+            if (metaRes.ok) {
+              const meta = await metaRes.json().catch(() => ({}));
+              const fresh = typeof meta?.baseUrl === "string" ? meta.baseUrl : "";
+              if (fresh) {
+                baseUrl = fresh;
+                if (fresh !== p.baseUrl) {
+                  await prisma.photo.update({
+                    where: { id: p.id },
+                    data: { baseUrl: fresh },
+                  });
+                }
+              }
+            }
+          } catch {
+            // ignore meta refresh errors
+          }
+        }
+
+        try {
         if (!baseUrl) {
           missingBaseUrl += 1;
           failures.push({ id: p.id, reason: "missing_baseUrl" });
