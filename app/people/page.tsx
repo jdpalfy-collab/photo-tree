@@ -471,11 +471,12 @@ export default function PeoplePage() {
 
       {editingPersonId && isEditing ? (
         <div
-          onClick={() => setEditingPersonId(null)}
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.6)",
+            background: "rgba(248,250,252,0.55)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -505,14 +506,25 @@ export default function PeoplePage() {
                 <div style={{ display: "grid", gap: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontWeight: 600 }}>Edit Profile</div>
-                    <button onClick={() => setEditingPersonId(null)} style={{ fontSize: 10, padding: "3px 6px" }}>
-                      Close
+                    <button
+                      onClick={() => {
+                        setEditingPersonId(null);
+                        setCropZoom((m) => ({ ...m, [p.id]: p.profileZoom ?? 1 }));
+                        setCropX((m) => ({ ...m, [p.id]: p.profileX ?? 0 }));
+                        setCropY((m) => ({ ...m, [p.id]: p.profileY ?? 0 }));
+                        setEditFirst((m) => ({ ...m, [p.id]: p.firstName ?? "" }));
+                        setEditLast((m) => ({ ...m, [p.id]: p.lastName ?? "" }));
+                        setEditBirth((m) => ({ ...m, [p.id]: p.birthYear ? String(p.birthYear) : "" }));
+                      }}
+                      style={{ fontSize: 10, padding: "3px 6px", color: "#b91c1c" }}
+                    >
+                      Cancel
                     </button>
                   </div>
                   <div
                     style={{
-                      width: "260px",
-                      height: "260px",
+                      width: "320px",
+                      height: "320px",
                       background: "#ffffff",
                       border: "2px solid #dbeafe",
                       borderRadius: 10,
@@ -595,18 +607,21 @@ export default function PeoplePage() {
                       <div style={{ fontSize: 12, color: "#555" }}>
                         Drag the photo to reposition
                       </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
                         <button
-                          onClick={() => saveCrop(p.id)}
-                          disabled={cropSaving[p.id]}
+                          onClick={async () => {
+                            await saveCrop(p.id);
+                            await saveName(p.id);
+                          }}
+                          disabled={cropSaving[p.id] || editSaving[p.id]}
                           style={{ fontSize: 12 }}
                         >
-                          {cropSaving[p.id] ? "Saving..." : "Save crop"}
+                          {cropSaving[p.id] || editSaving[p.id] ? "Saving..." : "Save profile"}
                         </button>
-                        {cropError[p.id] ? (
-                          <div style={{ fontSize: 11, color: "#991b1b" }}>{cropError[p.id]}</div>
-                        ) : null}
                       </div>
+                      {cropError[p.id] ? (
+                        <div style={{ fontSize: 11, color: "#991b1b" }}>{cropError[p.id]}</div>
+                      ) : null}
                     </div>
                   ) : null}
                   <div style={{ display: "grid", gap: 6 }}>
@@ -630,18 +645,9 @@ export default function PeoplePage() {
                       style={{ fontSize: 12, padding: "6px 8px" }}
                     />
                   </div>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    <button
-                      onClick={() => saveName(p.id)}
-                      disabled={editSaving[p.id]}
-                      style={{ fontSize: 12, width: "fit-content" }}
-                    >
-                      {editSaving[p.id] ? "Saving..." : "Save profile"}
-                    </button>
-                    {editError[p.id] ? (
-                      <div style={{ fontSize: 11, color: "#991b1b" }}>{editError[p.id]}</div>
-                    ) : null}
-                  </div>
+                  {editError[p.id] ? (
+                    <div style={{ fontSize: 11, color: "#991b1b" }}>{editError[p.id]}</div>
+                  ) : null}
                   <div>
                     {loadingPhotos[p.id] ? (
                       <div style={{ fontSize: 12, color: "#666" }}>Loading photos…</div>

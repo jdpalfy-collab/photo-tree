@@ -63,7 +63,7 @@ export default function FamilyTreeManualPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [layoutApplied, setLayoutApplied] = useState(false);
   const cardSize = 220;
-  const cardHeight = cardSize * 2;
+  const cardHeight = cardSize;
   const edgePad = 12;
   const lineThickness = 8;
   const [canvasSize, setCanvasSize] = useState({ w: 2400, h: 1800 });

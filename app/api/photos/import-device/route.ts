@@ -111,11 +111,9 @@ export async function POST(req: Request) {
         ? exifDate.toISOString()
         : filenameYear
         ? new Date(`${filenameYear}-01-01`).toISOString()
-        : file.lastModified
-        ? new Date(file.lastModified).toISOString()
-        : new Date().toISOString();
+        : null;
 
-      created.push({ id, storageUrl: blob.url, mimeType, createdTime });
+      created.push({ id, storageUrl: blob.url, mimeType, createdTime: createdTime || "" });
     }
 
     return NextResponse.json({ ok: true, items: created });
