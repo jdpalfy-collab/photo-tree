@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEditingMode } from "../../providers";
@@ -27,6 +27,10 @@ type Photo = {
   location?: string | null;
   description?: string | null;
   rotation?: number | null;
+  cropX?: number | null;
+  cropY?: number | null;
+  cropW?: number | null;
+  cropH?: number | null;
   tags?: {
     id: string;
     person: { id: string; name: string; firstName?: string | null; lastName?: string | null };
@@ -60,6 +64,11 @@ export default function PersonPhotosPage() {
   const [descriptionDrafts, setDescriptionDrafts] = useState<Record<string, string>>({});
   const [descriptionSaving, setDescriptionSaving] = useState<Record<string, boolean>>({});
   const [descriptionError, setDescriptionError] = useState<Record<string, string>>({});
+  const [cropMode, setCropMode] = useState<Record<string, boolean>>({});
+  const [cropDrafts, setCropDrafts] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
+  const cropDragRef = React.useRef<{ photoId: string | null; startX: number; startY: number; rect: DOMRect | null }>(
+    { photoId: null, startX: 0, startY: 0, rect: null }
+  );
   const [selectedWith, setSelectedWith] = useState<Record<string, boolean>>({});
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -103,6 +112,18 @@ export default function PersonPhotosPage() {
     if (!p) return "Person";
     const full = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
     return full || p.name;
+  }
+
+  function cropTransform(p: Photo) {
+    if (!p.cropW || !p.cropH) return {};
+    const scaleX = 1 / p.cropW;
+    const scaleY = 1 / p.cropH;
+    const tx = -((p.cropX ?? 0) * 100);
+    const ty = -((p.cropY ?? 0) * 100);
+    return {
+      transformOrigin: "top left",
+      transform: `translate(${tx}%, ${ty}%) scale(${scaleX}, ${scaleY})`,
+    } as React.CSSProperties;
   }
 
   async function addNewPersonFromEdit(photoId: string) {
@@ -272,6 +293,17 @@ export default function PersonPhotosPage() {
       await load();
     } finally {
       setDescriptionSaving((m) => ({ ...m, [photoId]: false }));
+    }
+  }
+
+  async function saveCrop(photoId: string, crop: { x: number; y: number; w: number; h: number } | null) {
+    const r = await fetch(`/api/photos/${photoId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ crop }),
+    });
+    if (r.ok) {
+      await load();
     }
   }
 
@@ -541,6 +573,7 @@ export default function PersonPhotosPage() {
                       display: "block",
                       transformOrigin: "center",
                       transform: `rotate(${p.rotation ?? 0}deg)`,
+                      ...cropTransform(p),
                     }}
                     onClick={() => {
                       setViewerIndex(idx);
@@ -598,7 +631,9 @@ export default function PersonPhotosPage() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.6)",
+            background: "rgba(248,250,252,0.55)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -652,6 +687,46 @@ export default function PersonPhotosPage() {
                       overflow: "hidden",
                       background: "#f8fafc",
                       border: "2px solid #e2e8f0",
+                      position: "relative",
+                      cursor: cropMode[p.id] ? "crosshair" : "default",
+                    }}
+                    onMouseDown={(e) => {
+                      if (!cropMode[p.id]) return;
+                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      cropDragRef.current = { photoId: p.id, startX: e.clientX, startY: e.clientY, rect };
+                      setCropDrafts((m) => ({ ...m, [p.id]: { x: 0, y: 0, w: 0, h: 0 } }));
+                    }}
+                    onMouseMove={(e) => {
+                      const drag = cropDragRef.current;
+                      if (!drag.photoId || drag.photoId !== p.id || !drag.rect) return;
+                      const rect = drag.rect;
+                      const x1 = Math.max(rect.left, Math.min(rect.right, drag.startX));
+                      const y1 = Math.max(rect.top, Math.min(rect.bottom, drag.startY));
+                      const x2 = Math.max(rect.left, Math.min(rect.right, e.clientX));
+                      const y2 = Math.max(rect.top, Math.min(rect.bottom, e.clientY));
+                      const left = Math.min(x1, x2) - rect.left;
+                      const top = Math.min(y1, y2) - rect.top;
+                      const w = Math.abs(x2 - x1);
+                      const h = Math.abs(y2 - y1);
+                      setCropDrafts((m) => ({
+                        ...m,
+                        [p.id]: {
+                          x: left / rect.width,
+                          y: top / rect.height,
+                          w: w / rect.width,
+                          h: h / rect.height,
+                        },
+                      }));
+                    }}
+                    onMouseUp={() => {
+                      if (cropDragRef.current.photoId === p.id) {
+                        cropDragRef.current.photoId = null;
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      if (cropDragRef.current.photoId === p.id) {
+                        cropDragRef.current.photoId = null;
+                      }
                     }}
                   >
                     <img
@@ -664,8 +739,22 @@ export default function PersonPhotosPage() {
                         display: "block",
                         transformOrigin: "center",
                         transform: `rotate(${p.rotation ?? 0}deg)`,
+                        ...cropTransform(p),
                       }}
                     />
+                    {cropMode[p.id] && cropDrafts[p.id] ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: `${(cropDrafts[p.id].x || 0) * 100}%`,
+                          top: `${(cropDrafts[p.id].y || 0) * 100}%`,
+                          width: `${(cropDrafts[p.id].w || 0) * 100}%`,
+                          height: `${(cropDrafts[p.id].h || 0) * 100}%`,
+                          border: "2px solid #3b82f6",
+                          background: "rgba(59,130,246,0.1)",
+                        }}
+                      />
+                    ) : null}
                   </div>
                   <div style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
                     {p.description ? (
@@ -716,6 +805,26 @@ export default function PersonPhotosPage() {
                         Rotate 90°
                       </button>
                       <button
+                        onClick={() => {
+                          setCropMode((m) => ({ ...m, [p.id]: !m[p.id] }));
+                          setCropDrafts((m) => {
+                            const next = { ...m };
+                            if (!m[p.id]) {
+                              next[p.id] = {
+                                x: p.cropX ?? 0,
+                                y: p.cropY ?? 0,
+                                w: p.cropW ?? 1,
+                                h: p.cropH ?? 1,
+                              };
+                            }
+                            return next;
+                          });
+                        }}
+                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 78 }}
+                      >
+                        {cropMode[p.id] ? "Cancel Crop" : "Crop"}
+                      </button>
+                      <button
                         onClick={() => deletePhoto(p.id)}
                         style={{ fontSize: 10, padding: "3px 6px", minWidth: 78, color: "#b91c1c" }}
                       >
@@ -748,6 +857,22 @@ export default function PersonPhotosPage() {
                         {dateDrafts[p.id] !== undefined ? "Cancel" : "Edit Date"}
                       </button>
                     </div>
+                    {cropMode[p.id] ? (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button
+                          onClick={() => saveCrop(p.id, cropDrafts[p.id] || null)}
+                          style={{ fontSize: 10, padding: "3px 6px", minWidth: 110 }}
+                        >
+                          Apply crop
+                        </button>
+                        <button
+                          onClick={() => saveCrop(p.id, null)}
+                          style={{ fontSize: 10, padding: "3px 6px", minWidth: 110 }}
+                        >
+                          Clear crop
+                        </button>
+                      </div>
+                    ) : null}
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
                       <button
                         onClick={() => {

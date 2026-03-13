@@ -20,6 +20,10 @@ export async function GET() {
           location: true,
           description: true,
           rotation: true,
+          cropX: true,
+          cropY: true,
+          cropW: true,
+          cropH: true,
         },
     });
 

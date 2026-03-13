@@ -24,6 +24,10 @@ export async function GET(req: NextRequest) {
             location: true,
             description: true,
             rotation: true,
+            cropX: true,
+            cropY: true,
+            cropW: true,
+            cropH: true,
             tags: {
               include: {
                 person: {

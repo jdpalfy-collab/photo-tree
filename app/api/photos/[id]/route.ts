@@ -22,6 +22,10 @@ export async function GET(req: NextRequest) {
         location: true,
         description: true,
         rotation: true,
+        cropX: true,
+        cropY: true,
+        cropW: true,
+        cropH: true,
       },
     });
 
@@ -48,7 +52,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const data: { createdTime?: Date | null; location?: string | null; description?: string | null; rotation?: number | null } = {};
+    const data: { createdTime?: Date | null; location?: string | null; description?: string | null; rotation?: number | null; cropX?: number | null; cropY?: number | null; cropW?: number | null; cropH?: number | null } = {};
     const createdTimeRaw = body?.createdTime;
     if (createdTimeRaw !== undefined) {
       if (typeof createdTimeRaw !== "string") {
@@ -118,6 +122,31 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "crop")) {
+      const crop = body?.crop;
+      if (crop === null) {
+        data.cropX = null;
+        data.cropY = null;
+        data.cropW = null;
+        data.cropH = null;
+      } else if (
+        typeof crop?.x === "number" &&
+        typeof crop?.y === "number" &&
+        typeof crop?.w === "number" &&
+        typeof crop?.h === "number"
+      ) {
+        data.cropX = Math.max(0, Math.min(1, crop.x));
+        data.cropY = Math.max(0, Math.min(1, crop.y));
+        data.cropW = Math.max(0.05, Math.min(1, crop.w));
+        data.cropH = Math.max(0.05, Math.min(1, crop.h));
+      } else {
+        return NextResponse.json(
+          { ok: false, error: "crop must be {x,y,w,h} or null" },
+          { status: 400 }
+        );
+      }
+    }
+
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
         { ok: false, error: "No fields provided to update" },
@@ -137,6 +166,10 @@ export async function PATCH(req: NextRequest) {
         location: true,
         description: true,
         rotation: true,
+        cropX: true,
+        cropY: true,
+        cropW: true,
+        cropH: true,
       },
     });
 

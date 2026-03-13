@@ -22,6 +22,10 @@ model Photo {
   location    String?
   description String?
   rotation    Int?
+  cropX       Float?
+  cropY       Float?
+  cropW       Float?
+  cropH       Float?
   tags        PhotoTag[]
 }
 
