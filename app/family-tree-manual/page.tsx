@@ -312,7 +312,7 @@ export default function FamilyTreeManualPage() {
       if (!dragRef.current.kind || !dragRef.current.id) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      const step = 10;
+      const step = 200;
       const qdx = Math.round(dx / step) * step;
       const qdy = Math.round(dy / step) * step;
       const id = dragRef.current.id;

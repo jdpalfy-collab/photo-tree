@@ -68,6 +68,11 @@ export default function PersonPhotosPage() {
   const [soloOnly, setSoloOnly] = useState(false);
   const [tagLoading, setTagLoading] = useState<Record<string, boolean>>({});
   const [tagError, setTagError] = useState<Record<string, string>>({});
+  const [newPersonDraft, setNewPersonDraft] = useState<{ firstName: string; lastName: string; birthYear: string }>({
+    firstName: "",
+    lastName: "",
+    birthYear: "",
+  });
 
   async function load() {
     setErr("");
@@ -98,6 +103,25 @@ export default function PersonPhotosPage() {
     if (!p) return "Person";
     const full = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
     return full || p.name;
+  }
+
+  async function addNewPersonFromEdit(photoId: string) {
+    const firstName = newPersonDraft.firstName.trim();
+    const lastName = newPersonDraft.lastName.trim();
+    if (!firstName || !lastName) return;
+    const birthYear = newPersonDraft.birthYear.trim();
+    const r = await fetch("/api/people", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ firstName, lastName, birthYear }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return;
+    const newPerson = j?.person as Person;
+    if (!newPerson?.id) return;
+    setPeople((prev) => [...prev, newPerson]);
+    await addTag(photoId, newPerson.id);
+    setNewPersonDraft({ firstName: "", lastName: "", birthYear: "" });
   }
 
   async function loadTags(photoId: string) {
@@ -806,6 +830,35 @@ export default function PersonPhotosPage() {
                           })}
                         </div>
                       )}
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #e5e7eb" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Add new person</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <input
+                            placeholder="First name"
+                            value={newPersonDraft.firstName}
+                            onChange={(e) => setNewPersonDraft((d) => ({ ...d, firstName: e.target.value }))}
+                            style={{ fontSize: 10, padding: "3px 6px", width: 120 }}
+                          />
+                          <input
+                            placeholder="Last name"
+                            value={newPersonDraft.lastName}
+                            onChange={(e) => setNewPersonDraft((d) => ({ ...d, lastName: e.target.value }))}
+                            style={{ fontSize: 10, padding: "3px 6px", width: 120 }}
+                          />
+                          <input
+                            placeholder="Birth year"
+                            value={newPersonDraft.birthYear}
+                            onChange={(e) => setNewPersonDraft((d) => ({ ...d, birthYear: e.target.value }))}
+                            style={{ fontSize: 10, padding: "3px 6px", width: 90 }}
+                          />
+                          <button
+                            onClick={() => addNewPersonFromEdit(p.id)}
+                            style={{ fontSize: 10, padding: "3px 6px", minWidth: 90 }}
+                          >
+                            Add person
+                          </button>
+                        </div>
+                      </div>
                       {tagError[p.id] ? (
                         <pre style={{ marginTop: 8, fontSize: 11, color: "#991b1b", background: "#fee2e2", padding: 8, borderRadius: 8 }}>
                           {tagError[p.id]}
@@ -898,11 +951,10 @@ export default function PersonPhotosPage() {
 
         return viewerOpen && filtered[viewerIndex] ? (
           <div
-            onClick={() => setViewerOpen(false)}
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.85)",
+              background: "rgba(255,255,255,0.96)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -910,15 +962,15 @@ export default function PersonPhotosPage() {
               padding: 24,
             }}
           >
-            <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "92vw", maxWidth: 1100, height: "90vh" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "96vw", maxWidth: 1400, height: "94vh" }}>
               <div
                 style={{
                   width: "100%",
-                  height: "88vh",
+                  height: "94vh",
                   borderRadius: 10,
                   overflow: "hidden",
-                  background: "#0f172a",
-                  border: "2px solid #1e293b",
+                  background: "#ffffff",
+                  border: "2px solid #e2e8f0",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
