@@ -603,15 +603,17 @@ export default function SavedPage() {
               Close
             </button>
             <button
-              onClick={() => setViewerIndex((i) => (i > 0 ? i - 1 : i))}
-              disabled={viewerIndex === 0}
+              onClick={() =>
+                setViewerIndex((i) => (i > 0 ? i - 1 : displayPhotos.length - 1))
+              }
               style={{ position: "absolute", left: -8, top: "50%", transform: "translate(-100%,-50%)", fontSize: 12 }}
             >
               ← Prev
             </button>
             <button
-              onClick={() => setViewerIndex((i) => (i < displayPhotos.length - 1 ? i + 1 : i))}
-              disabled={viewerIndex === displayPhotos.length - 1}
+              onClick={() =>
+                setViewerIndex((i) => (i < displayPhotos.length - 1 ? i + 1 : 0))
+              }
               style={{ position: "absolute", right: -8, top: "50%", transform: "translate(100%,-50%)", fontSize: 12 }}
             >
               Next →

@@ -1133,12 +1133,12 @@ export default function FamilyTreeManualPage() {
               <div
                 style={{
                   width: "100%",
-                  aspectRatio: "1 / 1",
-                  background: "#fafafa",
+                  height: cardSize - 34,
+                  background: "#ffffff",
                   border: "2px solid #dbeafe",
                   borderRadius: 10,
                   overflow: "hidden",
-                  marginBottom: 8,
+                  marginBottom: 6,
                   userSelect: "none",
                 }}
                 onDragStart={(e) => e.preventDefault()}
@@ -1162,11 +1162,20 @@ export default function FamilyTreeManualPage() {
                   <div style={{ padding: 12, color: "#999", fontSize: 13 }}>No tagged photo</div>
                 )}
               </div>
-              <div style={{ fontWeight: 700, fontSize: 15, textAlign: "right", color: "#3b82f6" }}>
-                {displayName(p)}
-              </div>
-              <div style={{ fontSize: 13, color: "#555", textAlign: "right", fontWeight: 700 }}>
-                Born {p.birthYear ?? "—"}
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textAlign: "right",
+                  color: "#3b82f6",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{displayName(p)}</span>
+                <span style={{ color: "#555" }}>Born {p.birthYear ?? "—"}</span>
               </div>
             </div>
           );

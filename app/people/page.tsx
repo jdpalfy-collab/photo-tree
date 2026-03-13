@@ -507,86 +507,84 @@ export default function PeoplePage() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontWeight: 600 }}>Edit Profile</div>
                     <button
-                      onClick={() => {
-                        setEditingPersonId(null);
-                        setCropZoom((m) => ({ ...m, [p.id]: p.profileZoom ?? 1 }));
-                        setCropX((m) => ({ ...m, [p.id]: p.profileX ?? 0 }));
-                        setCropY((m) => ({ ...m, [p.id]: p.profileY ?? 0 }));
-                        setEditFirst((m) => ({ ...m, [p.id]: p.firstName ?? "" }));
-                        setEditLast((m) => ({ ...m, [p.id]: p.lastName ?? "" }));
-                        setEditBirth((m) => ({ ...m, [p.id]: p.birthYear ? String(p.birthYear) : "" }));
+                      onClick={async () => {
+                        await saveCrop(p.id);
+                        await saveName(p.id);
                       }}
-                      style={{ fontSize: 10, padding: "3px 6px", color: "#b91c1c" }}
+                      disabled={cropSaving[p.id] || editSaving[p.id]}
+                      style={{ fontSize: 10, padding: "3px 6px" }}
                     >
-                      Cancel
+                      {cropSaving[p.id] || editSaving[p.id] ? "Saving..." : "Save profile"}
                     </button>
                   </div>
-                  <div
-                    style={{
-                      width: "320px",
-                      height: "320px",
-                      background: "#ffffff",
-                      border: "2px solid #dbeafe",
-                      borderRadius: 10,
-                      overflow: "hidden",
-                      position: "relative",
-                      cursor: profileSrc ? "grab" : "default",
-                      touchAction: "none",
-                    }}
-                    onDragStart={(e) => e.preventDefault()}
-                    onMouseDown={(e) => {
-                      if (!profileSrc) return;
-                      e.preventDefault();
-                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                      cropDragRef.current = {
-                        personId: p.id,
-                        startX: e.clientX,
-                        startY: e.clientY,
-                        startCropX: cropX[p.id] ?? p.profileX ?? 0,
-                        startCropY: cropY[p.id] ?? p.profileY ?? 0,
-                        width: rect.width || 1,
-                        height: rect.height || 1,
-                      };
-                    }}
-                    onMouseMove={(e) => {
-                      const drag = cropDragRef.current;
-                      if (!drag.personId || drag.personId !== p.id) return;
-                      e.preventDefault();
-                      const dx = e.clientX - drag.startX;
-                      const dy = e.clientY - drag.startY;
-                      const nx = drag.startCropX + (dx / drag.width) * 100;
-                      const ny = drag.startCropY + (dy / drag.height) * 100;
-                      setCropX((m) => ({ ...m, [p.id]: Math.max(-150, Math.min(150, nx)) }));
-                      setCropY((m) => ({ ...m, [p.id]: Math.max(-150, Math.min(150, ny)) }));
-                    }}
-                    onMouseUp={() => {
-                      if (cropDragRef.current.personId === p.id) {
-                        cropDragRef.current.personId = null;
-                      }
-                    }}
-                    onMouseLeave={() => {
-                      if (cropDragRef.current.personId === p.id) {
-                        cropDragRef.current.personId = null;
-                      }
-                    }}
-                  >
-                    {profileSrc ? (
-                      <img
-                        src={profileSrc}
-                        alt={p.name}
-                        draggable={false}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                          display: "block",
-                          transformOrigin: "center",
-                          transform: `translate(${cropX[p.id] ?? p.profileX ?? 0}%, ${cropY[p.id] ?? p.profileY ?? 0}%) scale(${cropZoom[p.id] ?? p.profileZoom ?? 1}) rotate(${profileRotation}deg)`,
-                        }}
-                      />
-                    ) : (
-                      <div style={{ padding: 12, color: "#999", fontSize: 13 }}>No profile</div>
-                    )}
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <div
+                      style={{
+                        width: "320px",
+                        height: "320px",
+                        background: "#ffffff",
+                        border: "2px solid #dbeafe",
+                        borderRadius: 10,
+                        overflow: "hidden",
+                        position: "relative",
+                        cursor: profileSrc ? "grab" : "default",
+                        touchAction: "none",
+                      }}
+                      onDragStart={(e) => e.preventDefault()}
+                      onMouseDown={(e) => {
+                        if (!profileSrc) return;
+                        e.preventDefault();
+                        const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                        cropDragRef.current = {
+                          personId: p.id,
+                          startX: e.clientX,
+                          startY: e.clientY,
+                          startCropX: cropX[p.id] ?? p.profileX ?? 0,
+                          startCropY: cropY[p.id] ?? p.profileY ?? 0,
+                          width: rect.width || 1,
+                          height: rect.height || 1,
+                        };
+                      }}
+                      onMouseMove={(e) => {
+                        const drag = cropDragRef.current;
+                        if (!drag.personId || drag.personId !== p.id) return;
+                        e.preventDefault();
+                        const dx = e.clientX - drag.startX;
+                        const dy = e.clientY - drag.startY;
+                        const nx = drag.startCropX + (dx / drag.width) * 100;
+                        const ny = drag.startCropY + (dy / drag.height) * 100;
+                        setCropX((m) => ({ ...m, [p.id]: Math.max(-150, Math.min(150, nx)) }));
+                        setCropY((m) => ({ ...m, [p.id]: Math.max(-150, Math.min(150, ny)) }));
+                      }}
+                      onMouseUp={() => {
+                        if (cropDragRef.current.personId === p.id) {
+                          cropDragRef.current.personId = null;
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        if (cropDragRef.current.personId === p.id) {
+                          cropDragRef.current.personId = null;
+                        }
+                      }}
+                    >
+                      {profileSrc ? (
+                        <img
+                          src={profileSrc}
+                          alt={p.name}
+                          draggable={false}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            display: "block",
+                            transformOrigin: "center",
+                            transform: `translate(${cropX[p.id] ?? p.profileX ?? 0}%, ${cropY[p.id] ?? p.profileY ?? 0}%) scale(${cropZoom[p.id] ?? p.profileZoom ?? 1}) rotate(${profileRotation}deg)`,
+                          }}
+                        />
+                      ) : (
+                        <div style={{ padding: 12, color: "#999", fontSize: 13 }}>No profile</div>
+                      )}
+                    </div>
                   </div>
                   {profileSrc ? (
                     <div style={{ display: "grid", gap: 8 }}>
@@ -609,14 +607,18 @@ export default function PeoplePage() {
                       </div>
                       <div style={{ display: "flex", justifyContent: "flex-end" }}>
                         <button
-                          onClick={async () => {
-                            await saveCrop(p.id);
-                            await saveName(p.id);
+                          onClick={() => {
+                            setEditingPersonId(null);
+                            setCropZoom((m) => ({ ...m, [p.id]: p.profileZoom ?? 1 }));
+                            setCropX((m) => ({ ...m, [p.id]: p.profileX ?? 0 }));
+                            setCropY((m) => ({ ...m, [p.id]: p.profileY ?? 0 }));
+                            setEditFirst((m) => ({ ...m, [p.id]: p.firstName ?? "" }));
+                            setEditLast((m) => ({ ...m, [p.id]: p.lastName ?? "" }));
+                            setEditBirth((m) => ({ ...m, [p.id]: p.birthYear ? String(p.birthYear) : "" }));
                           }}
-                          disabled={cropSaving[p.id] || editSaving[p.id]}
-                          style={{ fontSize: 12 }}
+                          style={{ fontSize: 12, color: "#b91c1c" }}
                         >
-                          {cropSaving[p.id] || editSaving[p.id] ? "Saving..." : "Save profile"}
+                          Cancel
                         </button>
                       </div>
                       {cropError[p.id] ? (
