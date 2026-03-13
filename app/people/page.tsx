@@ -513,7 +513,7 @@ export default function PeoplePage() {
                     style={{
                       width: "100%",
                       aspectRatio: "1 / 1",
-                      background: "#fafafa",
+                      background: "#ffffff",
                       border: "2px solid #dbeafe",
                       borderRadius: 10,
                       overflow: "hidden",
@@ -544,8 +544,8 @@ export default function PeoplePage() {
                       const dy = e.clientY - drag.startY;
                       const nx = drag.startCropX + (dx / drag.width) * 100;
                       const ny = drag.startCropY + (dy / drag.height) * 100;
-                      setCropX((m) => ({ ...m, [p.id]: Math.max(-50, Math.min(50, nx)) }));
-                      setCropY((m) => ({ ...m, [p.id]: Math.max(-50, Math.min(50, ny)) }));
+                      setCropX((m) => ({ ...m, [p.id]: Math.max(-150, Math.min(150, nx)) }));
+                      setCropY((m) => ({ ...m, [p.id]: Math.max(-150, Math.min(150, ny)) }));
                     }}
                     onMouseUp={() => {
                       if (cropDragRef.current.personId === p.id) {
@@ -566,7 +566,7 @@ export default function PeoplePage() {
                         style={{
                           width: "100%",
                           height: "100%",
-                          objectFit: "cover",
+                          objectFit: "contain",
                           display: "block",
                           transformOrigin: "center",
                           transform: `translate(${cropX[p.id] ?? p.profileX ?? 0}%, ${cropY[p.id] ?? p.profileY ?? 0}%) scale(${cropZoom[p.id] ?? p.profileZoom ?? 1}) rotate(${profileRotation}deg)`,
@@ -582,8 +582,8 @@ export default function PeoplePage() {
                         Zoom
                         <input
                           type="range"
-                          min="1"
-                          max="3"
+                          min="0.6"
+                          max="4"
                           step="0.05"
                           value={cropZoom[p.id] ?? p.profileZoom ?? 1}
                           onChange={(e) =>
