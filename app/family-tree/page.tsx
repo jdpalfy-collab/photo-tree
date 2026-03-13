@@ -681,7 +681,7 @@ export default function FamilyTreePage() {
                           style={{
                             width: "100%",
                             height: "100%",
-                            objectFit: "cover",
+                            objectFit: "contain",
                             display: "block",
                             transformOrigin: "center",
                             transform: `translate(${person.profileX ?? 0}%, ${person.profileY ?? 0}%) scale(${person.profileZoom ?? 1}) rotate(${profile?.rotation ?? 0}deg)`,

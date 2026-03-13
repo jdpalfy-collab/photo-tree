@@ -559,7 +559,9 @@ export default function SavedPage() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(255,255,255,0.0)",
+            background: "rgba(248,250,252,0.55)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -567,11 +569,11 @@ export default function SavedPage() {
             padding: 12,
           }}
         >
-          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "98vw", maxWidth: 1600, height: "96vh" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "94vw", maxWidth: 1400, height: "88vh" }}>
             <div
               style={{
                 width: "100%",
-                height: "96vh",
+                height: "88vh",
                 borderRadius: 10,
                 overflow: "hidden",
                 background: "transparent",

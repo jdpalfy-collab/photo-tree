@@ -403,7 +403,7 @@ export default function PeoplePage() {
                   style={{
                     width: "100%",
                     aspectRatio: "1 / 1",
-                    background: "#fafafa",
+                    background: "#ffffff",
                     border: "2px solid #dbeafe",
                     borderRadius: 10,
                     overflow: "hidden",
@@ -417,7 +417,7 @@ export default function PeoplePage() {
                       style={{
                         width: "100%",
                         height: "100%",
-                        objectFit: "cover",
+                        objectFit: "contain",
                         display: "block",
                         transformOrigin: "center",
                         transform: `translate(${profileTransform(p).x}%, ${profileTransform(p).y}%) scale(${profileTransform(p).zoom}) rotate(${profilePhotos[p.id]?.rotation ?? 0}deg)`,
@@ -511,8 +511,8 @@ export default function PeoplePage() {
                   </div>
                   <div
                     style={{
-                      width: "100%",
-                      aspectRatio: "1 / 1",
+                      width: "260px",
+                      height: "260px",
                       background: "#ffffff",
                       border: "2px solid #dbeafe",
                       borderRadius: 10,

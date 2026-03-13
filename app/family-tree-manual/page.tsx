@@ -63,9 +63,9 @@ export default function FamilyTreeManualPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [layoutApplied, setLayoutApplied] = useState(false);
   const cardSize = 220;
-  const cardHeight = cardSize + 70;
+  const cardHeight = cardSize * 2;
   const edgePad = 12;
-  const lineThickness = 6;
+  const lineThickness = 8;
   const [canvasSize, setCanvasSize] = useState({ w: 2400, h: 1800 });
   const [selectionRect, setSelectionRect] = useState<{
     x: number;
@@ -312,7 +312,7 @@ export default function FamilyTreeManualPage() {
       if (!dragRef.current.kind || !dragRef.current.id) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      const step = 100;
+      const step = Math.max(20, Math.round(cardSize / 2));
       const qdx = Math.round(dx / step) * step;
       const qdy = Math.round(dy / step) * step;
       const id = dragRef.current.id;
@@ -424,18 +424,24 @@ export default function FamilyTreeManualPage() {
 
       if (dragRef.current.kind === "line") {
         const snapThreshold = 10;
+        const lineLen = (it: Item) => {
+          if (it.kind !== "line") return 0;
+          if (it.lineType === "h-black") return cardHeight * 2;
+          return cardHeight;
+        };
         const endpoints = (it: Item) => {
           if (it.kind !== "line") return [];
           const isVertical = it.lineType === "v-black";
+          const len = lineLen(it);
           if (isVertical) {
             return [
               { x: it.x, y: it.y },
-              { x: it.x, y: it.y + it.length },
+              { x: it.x, y: it.y + len },
             ];
           }
           return [
             { x: it.x, y: it.y },
-            { x: it.x + it.length, y: it.y },
+            { x: it.x + len, y: it.y },
           ];
         };
         const allEndpoints = items.flatMap((it) => (it.id === id ? [] : endpoints(it)));
@@ -453,10 +459,11 @@ export default function FamilyTreeManualPage() {
           return prev.map((it) => {
             if (it.id !== id || it.kind !== "line") return it;
             const isVertical = it.lineType === "v-black";
+            const fixedLen = lineLen(it);
             let nx = dragRef.current.originX + qdx;
             let ny = dragRef.current.originY + qdy;
               // snap moved line by matching endpoints
-              const moved = { ...it, x: nx, y: ny };
+              const moved = { ...it, x: nx, y: ny, length: fixedLen };
               const movedEnds = endpoints(moved);
               for (const me of movedEnds) {
                 const hit = allEndpoints.find(
@@ -472,7 +479,7 @@ export default function FamilyTreeManualPage() {
               if (it.lineType === "h-blue") {
                 const lineY = ny;
                 const lineX1 = nx;
-                const lineX2 = nx + it.length;
+                const lineX2 = nx + fixedLen;
                 const tol = 40;
                 const currentPositions = latestPositionsRef.current;
                 const candidates = people
@@ -508,10 +515,10 @@ export default function FamilyTreeManualPage() {
                     [leftCard.id]: { x: prevPos[leftCard.id].x, y: alignedY },
                     [rightCard.id]: { x: prevPos[rightCard.id].x, y: alignedY },
                   }));
-                  return { ...it, x: nx, y: ny, length: newLen };
+                  return { ...it, x: nx, y: ny, length: fixedLen };
                 }
               }
-              return { ...it, x: nx, y: ny };
+              return { ...it, x: nx, y: ny, length: fixedLen };
           });
         });
         if (dragRef.current.groupPeople && dragRef.current.mode === "move") {
@@ -545,7 +552,7 @@ export default function FamilyTreeManualPage() {
             const pos = positions[p.id];
             if (!pos) return;
             const bw = cardSize;
-            const bh = cardSize + 70;
+            const bh = cardHeight;
             if (inRect(pos.x, pos.y, bw, bh)) nextPeople.add(p.id);
           });
           items.forEach((it) => {
@@ -553,8 +560,9 @@ export default function FamilyTreeManualPage() {
               if (inRect(it.x, it.y, 18, 18)) nextItems.add(it.id);
             } else {
               const isVertical = it.lineType === "v-black";
-              const bw = isVertical ? lineThickness : it.length;
-              const bh = isVertical ? it.length : lineThickness;
+              const len = it.lineType === "h-black" ? cardHeight * 2 : cardHeight;
+              const bw = isVertical ? lineThickness : len;
+              const bh = isVertical ? len : lineThickness;
               if (inRect(it.x, it.y, bw, bh)) nextItems.add(it.id);
             }
           });
@@ -811,9 +819,7 @@ export default function FamilyTreeManualPage() {
 
   function addLine(lineType: LineType) {
     const id = `line_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const baseLen = 160;
-    const defaultLen = Math.round(baseLen * 1.5);
-    const length = lineType === "h-black" ? defaultLen * 2 : defaultLen;
+    const length = lineType === "h-black" ? cardHeight * 2 : cardHeight;
     setItems((prev) => [
       ...prev,
       { id, kind: "line", lineType, x: 100, y: 100, length },
@@ -868,8 +874,9 @@ export default function FamilyTreeManualPage() {
         if (it.y + h > maxY) maxY = it.y + h;
       } else {
         const isVertical = it.lineType === "v-black";
-        const w = isVertical ? lineThickness : it.length;
-        const h = isVertical ? it.length : lineThickness;
+        const len = it.lineType === "h-black" ? cardHeight * 2 : cardHeight;
+        const w = isVertical ? lineThickness : len;
+        const h = isVertical ? len : lineThickness;
         if (it.x + w > maxX) maxX = it.x + w;
         if (it.y + h > maxY) maxY = it.y + h;
       }
@@ -1052,10 +1059,12 @@ export default function FamilyTreeManualPage() {
           }
 
           const isVertical = it.lineType === "v-black";
+          const fixedLen = it.lineType === "h-black" ? cardHeight * 2 : cardHeight;
           const isBlue = it.lineType === "h-blue";
           const thickness = lineThickness;
           const color = isBlue ? "#2563eb" : "#111827";
           const isActive = activeLineId === it.id;
+          const len = fixedLen;
           return (
             <div
               key={it.id}
@@ -1063,8 +1072,8 @@ export default function FamilyTreeManualPage() {
                 position: "absolute",
                 left: it.x,
                 top: it.y,
-                width: isVertical ? thickness : it.length,
-                height: isVertical ? it.length : thickness,
+                width: isVertical ? thickness : len,
+                height: isVertical ? len : thickness,
                 minWidth: isVertical ? thickness : undefined,
                 minHeight: isVertical ? undefined : thickness,
                 background: color,
@@ -1107,7 +1116,7 @@ export default function FamilyTreeManualPage() {
                 left: pos.x,
                 top: pos.y,
                 width: cardSize,
-                height: cardSize + 70,
+                height: cardHeight,
                 border: "2px solid #cfe4ff",
                 borderRadius: 12,
                 padding: 10,
@@ -1134,21 +1143,21 @@ export default function FamilyTreeManualPage() {
                 }}
                 onDragStart={(e) => e.preventDefault()}
               >
-                {profileSrc ? (
-                  <img
-                    src={profileSrc}
-                    alt={displayName(p)}
-                    draggable={false}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      display: "block",
-                      userSelect: "none",
-                      transformOrigin: "center",
-                      transform: `translate(${p.profileX ?? 0}%, ${p.profileY ?? 0}%) scale(${p.profileZoom ?? 1}) rotate(${profile?.rotation ?? 0}deg)`,
-                    }}
-                  />
+                    {profileSrc ? (
+                      <img
+                        src={profileSrc}
+                        alt={displayName(p)}
+                        draggable={false}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain",
+                          display: "block",
+                          userSelect: "none",
+                          transformOrigin: "center",
+                          transform: `translate(${p.profileX ?? 0}%, ${p.profileY ?? 0}%) scale(${p.profileZoom ?? 1}) rotate(${profile?.rotation ?? 0}deg)`,
+                        }}
+                      />
                 ) : (
                   <div style={{ padding: 12, color: "#999", fontSize: 13 }}>No tagged photo</div>
                 )}

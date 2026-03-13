@@ -382,7 +382,7 @@ export default function PersonPhotosPage() {
                   style={{
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover",
+                    objectFit: "contain",
                     display: "block",
                     transformOrigin: "center",
                     transform: `translate(${person?.profileX ?? 0}%, ${person?.profileY ?? 0}%) scale(${person?.profileZoom ?? 1}) rotate(${profile?.rotation ?? 0}deg)`,
@@ -537,7 +537,7 @@ export default function PersonPhotosPage() {
                     style={{
                       width: "100%",
                       height: "100%",
-                      objectFit: "cover",
+                      objectFit: "contain",
                       display: "block",
                       transformOrigin: "center",
                       transform: `rotate(${p.rotation ?? 0}deg)`,
@@ -950,7 +950,9 @@ export default function PersonPhotosPage() {
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(255,255,255,0.0)",
+              background: "rgba(248,250,252,0.55)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -958,11 +960,11 @@ export default function PersonPhotosPage() {
               padding: 12,
             }}
           >
-            <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "98vw", maxWidth: 1600, height: "96vh" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "94vw", maxWidth: 1400, height: "88vh" }}>
               <div
                 style={{
                   width: "100%",
-                  height: "96vh",
+                  height: "88vh",
                   borderRadius: 10,
                   overflow: "hidden",
                   background: "transparent",

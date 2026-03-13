@@ -69,6 +69,15 @@ function parseExifDate(bytes: Buffer): Date | null {
   return null;
 }
 
+function yearFromFilename(name: string | null): number | null {
+  if (!name) return null;
+  const match = name.match(/(19|20)\d{2}/);
+  if (!match) return null;
+  const year = Number(match[0]);
+  if (year < 1900 || year > 2100) return null;
+  return year;
+}
+
 export async function POST(req: Request) {
   try {
     const form = await req.formData();
@@ -97,8 +106,11 @@ export async function POST(req: Request) {
       });
 
       const exifDate = parseExifDate(bytes);
+      const filenameYear = yearFromFilename(file.name || "");
       const createdTime = exifDate
         ? exifDate.toISOString()
+        : filenameYear
+        ? new Date(`${filenameYear}-01-01`).toISOString()
         : file.lastModified
         ? new Date(file.lastModified).toISOString()
         : new Date().toISOString();
