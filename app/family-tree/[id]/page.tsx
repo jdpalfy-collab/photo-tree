@@ -571,11 +571,7 @@ export default function PersonPhotosPage() {
                         {createdYear || ""}
                       </div>
                     ) : null}
-                    {others.length > 0 ? (
-                      <div>
-                        <i>With</i> {others.join(", ")}
-                      </div>
-                    ) : null}
+                    {others.length > 0 ? <div>With {others.join(", ")}</div> : null}
                   </div>
                 </div>
                 {isEditing ? (

@@ -475,7 +475,7 @@ export default function PickerPage() {
 
         {items.length > 0 ? (
           <button onClick={clearImportSession} disabled={busy} style={{ padding: "8px 12px" }}>
-            {savedToDb ? "Done adding details" : "Clear import session"}
+            {savedToDb ? (sessionId ? "Done adding details" : "Clear import session") : "Clear import session"}
           </button>
         ) : null}
 

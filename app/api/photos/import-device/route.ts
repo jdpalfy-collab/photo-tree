@@ -37,7 +37,9 @@ export async function POST(req: Request) {
         contentType: mimeType,
       });
 
-      const createdTime = new Date().toISOString();
+      const createdTime = file.lastModified
+        ? new Date(file.lastModified).toISOString()
+        : new Date().toISOString();
 
       await prisma.photo.create({
         data: {

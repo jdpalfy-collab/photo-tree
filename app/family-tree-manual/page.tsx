@@ -65,7 +65,7 @@ export default function FamilyTreeManualPage() {
   const cardSize = 220;
   const cardHeight = cardSize + 70;
   const edgePad = 12;
-  const lineThickness = 4;
+  const lineThickness = 6;
   const [canvasSize, setCanvasSize] = useState({ w: 2400, h: 1800 });
   const [selectionRect, setSelectionRect] = useState<{
     x: number;
@@ -312,7 +312,7 @@ export default function FamilyTreeManualPage() {
       if (!dragRef.current.kind || !dragRef.current.id) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      const step = 200;
+      const step = 100;
       const qdx = Math.round(dx / step) * step;
       const qdy = Math.round(dy / step) * step;
       const id = dragRef.current.id;
@@ -921,47 +921,6 @@ export default function FamilyTreeManualPage() {
           <button onClick={() => addLine("v-black")} style={{ fontSize: 12 }}>Add vertical black line</button>
           <button onClick={() => addLine("h-black")} style={{ fontSize: 12 }}>Add horizontal black line</button>
           <button onClick={() => addLine("h-blue")} style={{ fontSize: 12 }}>Add horizontal blue line</button>
-          <button onClick={addHeart} style={{ fontSize: 12 }}>Add blue heart</button>
-          <button
-            onClick={() => {
-              const next: Record<string, { x: number; y: number }> = {};
-              const colW = 280;
-              const rowH = 320;
-              people.forEach((p, idx) => {
-                const col = idx % 3;
-                const row = Math.floor(idx / 3);
-                next[p.id] = { x: col * colW, y: row * rowH };
-              });
-              setPositions(next);
-              setItems([]);
-              void saveNow({ positions: next, items: [] });
-            }}
-            style={{ fontSize: 12 }}
-          >
-            Reset layout
-          </button>
-          <button onClick={() => saveNow()} style={{ fontSize: 12 }}>Save now</button>
-          <button
-            onClick={() => {
-              const stored = window.localStorage.getItem("photoTreeManualState");
-              if (!stored) return;
-              try {
-                const parsed = JSON.parse(stored);
-                const payload = {
-                  positions: parsed?.positions || {},
-                  items: Array.isArray(parsed?.items) ? parsed.items : [],
-                };
-                setPositions(payload.positions);
-                setItems(payload.items);
-                void saveNow(payload);
-              } catch {
-                // ignore
-              }
-            }}
-            style={{ fontSize: 12 }}
-          >
-            Restore from browser cache
-          </button>
           <span
             style={{
               fontSize: 12,
