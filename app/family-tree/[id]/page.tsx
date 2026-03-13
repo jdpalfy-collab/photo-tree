@@ -120,7 +120,7 @@ export default function PersonPhotosPage() {
     const newPerson = j?.person as Person;
     if (!newPerson?.id) return;
     setPeople((prev) => [...prev, newPerson]);
-    await addTag(photoId, newPerson.id);
+    await toggleTag(photoId, newPerson.id, true);
     setNewPersonDraft({ firstName: "", lastName: "", birthYear: "" });
   }
 
