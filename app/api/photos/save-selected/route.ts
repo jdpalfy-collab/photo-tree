@@ -8,6 +8,7 @@ type MediaItem = {
   id: string;
   createTime?: string;
   type?: string;
+  storageUrl?: string;
   mediaFile?: {
     baseUrl?: string;
     mimeType?: string;
@@ -136,7 +137,9 @@ export async function POST(req: Request) {
       const fileExt = extFromMime(mimeType);
       let storageUrl: string | null = null;
       try {
-        if (baseUrl) {
+        if (it.storageUrl) {
+          storageUrl = it.storageUrl;
+        } else if (baseUrl) {
           const sized = baseUrl.includes("=")
             ? baseUrl.replace(/=.*/, "=w2400-h2400")
             : `${baseUrl}=w2400-h2400`;

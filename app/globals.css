@@ -32,7 +32,7 @@
 }
 
 body {
-  background: linear-gradient(180deg, #eef5ff 0%, #f6f9fc 100%);
+  background: #f6f9fc;
   color: var(--foreground);
   font-family: "Source Sans 3", system-ui, -apple-system, Segoe UI, sans-serif;
   font-size: 16px;

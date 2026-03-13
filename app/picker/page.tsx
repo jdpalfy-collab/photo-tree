@@ -22,6 +22,7 @@ type MediaItem = {
   id: string;
   createTime?: string;
   type?: string;
+  storageUrl?: string;
   mediaFile?: {
     baseUrl?: string;
     mimeType?: string;
@@ -304,8 +305,11 @@ export default function PickerPage() {
 
   async function saveSelectedToDb() {
     if (!sessionId) {
-      appendLog("Missing sessionId. Create a session first.");
-      return;
+      const hasDeviceItems = items.some((it) => !!it.storageUrl);
+      if (!hasDeviceItems) {
+        appendLog("Missing sessionId. Create a session first.");
+        return;
+      }
     }
     setBusy(true);
     try {
@@ -319,9 +323,7 @@ export default function PickerPage() {
       if (!res.ok) throw new Error(JSON.stringify(data, null, 2));
       appendLog(`Saved to DB: ${JSON.stringify(data)}`);
       setSavedToDb(true);
-      if (items.length > 0) {
-        setEditPhotoId(items[0].id);
-      }
+      if (items.length > 0) setEditPhotoId(items[0].id);
     } catch (e: any) {
       appendLog(`ERROR saving to DB: ${String(e?.message || e)}`);
     } finally {
@@ -418,6 +420,7 @@ export default function PickerPage() {
         id: it.id,
         createTime: it.createdTime,
         type: "PHOTO",
+        storageUrl: it.storageUrl,
         mediaFile: {
           baseUrl: it.storageUrl,
           mimeType: it.mimeType,
@@ -425,7 +428,6 @@ export default function PickerPage() {
         },
       }));
       setItems((prev) => mergeItems(prev, mapped));
-      setSavedToDb(true);
     } finally {
       setDeviceBusy(false);
     }
@@ -435,53 +437,54 @@ export default function PickerPage() {
     <main style={{ padding: 24, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif" }}>
       <h1 style={{ margin: 0 }}>Import</h1>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
-        {!savedToDb ? (
-          <>
-            <button onClick={createPickerSession} disabled={busy} style={{ padding: "8px 12px" }}>
-              Import From Google Photos
+      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {!savedToDb ? (
+            <>
+              <button onClick={createPickerSession} disabled={busy} style={{ padding: "8px 12px" }}>
+                Import From Google Photos
+              </button>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  ref={fileInputRef}
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const files = e.target.files;
+                    if (files && files.length > 0) {
+                      void importFromDevice(files);
+                    }
+                    e.currentTarget.value = "";
+                  }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={deviceBusy}
+                  style={{ padding: "8px 12px" }}
+                >
+                  {deviceBusy ? "Importing…" : "Import From Device"}
+                </button>
+              </label>
+            </>
+          ) : null}
+          <span style={{ marginLeft: 12, color: "#555" }}>
+            Selected: <b>{selectedCount}</b>
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {!savedToDb && items.length > 0 ? (
+            <button onClick={saveSelectedToDb} disabled={busy} style={{ padding: "8px 12px" }}>
+              Save Images to PhotoTree
             </button>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                ref={fileInputRef}
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const files = e.target.files;
-                  if (files && files.length > 0) {
-                    void importFromDevice(files);
-                  }
-                  e.currentTarget.value = "";
-                }}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={deviceBusy}
-                style={{ padding: "8px 12px" }}
-              >
-                {deviceBusy ? "Importing…" : "Import From Device"}
-              </button>
-            </label>
-
-            {items.length > 0 ? (
-              <button onClick={saveSelectedToDb} disabled={busy || !sessionId} style={{ padding: "8px 12px" }}>
-                Save Images to PhotoTree
-              </button>
-            ) : null}
-          </>
-        ) : null}
-
-        {items.length > 0 ? (
-          <button onClick={clearImportSession} disabled={busy} style={{ padding: "8px 12px" }}>
-            {savedToDb ? (sessionId ? "Done adding details" : "Clear import session") : "Clear import session"}
-          </button>
-        ) : null}
-
-        <span style={{ marginLeft: 12, color: "#555" }}>
-          Selected: <b>{selectedCount}</b>
-        </span>
+          ) : null}
+          {items.length > 0 ? (
+            <button onClick={clearImportSession} disabled={busy} style={{ padding: "8px 12px" }}>
+              {savedToDb ? (sessionId ? "Done adding details" : "Clear import session") : "Clear import session"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
 
