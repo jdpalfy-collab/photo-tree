@@ -164,15 +164,29 @@ export default function PersonPhotosPage() {
     return full || p.name;
   }
 
-  function cropTransform(p: Photo) {
-    if (!p.cropW || !p.cropH) return {};
-    const scaleX = 1 / p.cropW;
-    const scaleY = 1 / p.cropH;
-    const tx = -((p.cropX ?? 0) * 100);
-    const ty = -((p.cropY ?? 0) * 100);
+  function imageTransform(
+    p: Photo,
+    draft?: { x: number; y: number; w: number; h: number }
+  ) {
+    const rotate = p.rotation ?? 0;
+    const crop =
+      draft && draft.w && draft.h
+        ? draft
+        : p.cropW && p.cropH
+        ? { x: p.cropX ?? 0, y: p.cropY ?? 0, w: p.cropW, h: p.cropH }
+        : null;
+    if (!crop) {
+      return rotate
+        ? ({ transformOrigin: "center", transform: `rotate(${rotate}deg)` } as React.CSSProperties)
+        : ({} as React.CSSProperties);
+    }
+    const scaleX = 1 / crop.w;
+    const scaleY = 1 / crop.h;
+    const tx = -(crop.x * 100);
+    const ty = -(crop.y * 100);
     return {
       transformOrigin: "top left",
-      transform: `translate(${tx}%, ${ty}%) scale(${scaleX}, ${scaleY})`,
+      transform: `translate(${tx}%, ${ty}%) scale(${scaleX}, ${scaleY}) rotate(${rotate}deg)`,
     } as React.CSSProperties;
   }
 
@@ -645,9 +659,7 @@ export default function PersonPhotosPage() {
                       height: "100%",
                       objectFit: "cover",
                       display: "block",
-                      transformOrigin: "center",
-                      transform: `rotate(${p.rotation ?? 0}deg)`,
-                      ...cropTransform(p),
+                      ...imageTransform(p),
                     }}
                     onClick={() => {
                       setViewerIndex(idx);
@@ -795,9 +807,7 @@ export default function PersonPhotosPage() {
                         height: "100%",
                         objectFit: "contain",
                         display: "block",
-                        transformOrigin: "center",
-                        transform: `rotate(${p.rotation ?? 0}deg)`,
-                        ...cropTransform(p),
+                        ...imageTransform(p, cropDrafts[p.id]),
                       }}
                     />
                     {cropMode[p.id] && cropDrafts[p.id] ? (
@@ -1176,13 +1186,14 @@ export default function PersonPhotosPage() {
                 <img
                   src={viewerSrc(filtered[viewerIndex])}
                   alt={filtered[viewerIndex].id}
+                  draggable={false}
+                  onDragStart={(e) => e.preventDefault()}
                   style={{
                     width: "100%",
                     height: "100%",
                     objectFit: "contain",
                     display: "block",
-                    transformOrigin: "center",
-                    transform: `rotate(${filtered[viewerIndex].rotation ?? 0}deg)`,
+                    ...imageTransform(filtered[viewerIndex]),
                   }}
                 />
               </div>

@@ -404,6 +404,7 @@ export default function PickerPage() {
     if (!files || files.length === 0) return;
     setDeviceBusy(true);
     try {
+      setSavedToDb(false);
       const form = new FormData();
       Array.from(files).forEach((f) => form.append("files", f));
       const res = await fetch("/api/photos/import-device", {

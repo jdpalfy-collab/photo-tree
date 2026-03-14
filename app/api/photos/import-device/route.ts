@@ -78,6 +78,16 @@ function yearFromFilename(name: string | null): number | null {
   return year;
 }
 
+function dateFromLastModified(ms?: number | null): Date | null {
+  if (!ms || Number.isNaN(ms)) return null;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  const year = d.getUTCFullYear();
+  const now = new Date();
+  if (year < 1900 || year > now.getUTCFullYear() + 1) return null;
+  return d;
+}
+
 export async function POST(req: Request) {
   try {
     const form = await req.formData();
@@ -107,10 +117,13 @@ export async function POST(req: Request) {
 
       const exifDate = parseExifDate(bytes);
       const filenameYear = yearFromFilename(file.name || "");
+      const lastModifiedDate = dateFromLastModified((file as any).lastModified);
       const createdTime = exifDate
         ? exifDate.toISOString()
         : filenameYear
         ? new Date(`${filenameYear}-01-01`).toISOString()
+        : lastModifiedDate
+        ? lastModifiedDate.toISOString()
         : null;
 
       created.push({ id, storageUrl: blob.url, mimeType, createdTime: createdTime || "" });
