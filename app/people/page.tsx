@@ -374,7 +374,7 @@ export default function PeoplePage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
             gap: 16,
             maxWidth: 1600,
           }}

@@ -243,8 +243,8 @@ export default function FamilyTreeManualPage() {
     setPositions((prev) => {
       if (Object.keys(prev).length > 0) return prev;
       const next: Record<string, { x: number; y: number }> = {};
-      const colW = 280;
-      const rowH = 320;
+      const colW = cardSize + cardSize / 2;
+      const rowH = cardHeight + cardHeight / 2;
       list.forEach((p: Person, idx) => {
         const col = idx % 3;
         const row = Math.floor(idx / 3);
@@ -276,8 +276,8 @@ export default function FamilyTreeManualPage() {
     });
     setPositions((prev) => {
       const next = { ...prev };
-      const colW = 280;
-      const rowH = 320;
+      const colW = cardSize + cardSize / 2;
+      const rowH = cardHeight + cardHeight / 2;
       let idx = 0;
       people.forEach((p) => {
         if (next[p.id]) return;
@@ -834,8 +834,8 @@ export default function FamilyTreeManualPage() {
 
   function resetLayoutGrid() {
     const next: Record<string, { x: number; y: number }> = {};
-    const colW = 280;
-    const rowH = 320;
+      const colW = cardSize + cardSize / 2;
+      const rowH = cardHeight + cardHeight / 2;
     people.forEach((p, idx) => {
       const col = idx % 3;
       const row = Math.floor(idx / 3);
@@ -1133,7 +1133,7 @@ export default function FamilyTreeManualPage() {
               <div
                 style={{
                   width: "100%",
-                  height: cardSize - 34,
+                  height: cardSize - 40,
                   background: "#ffffff",
                   border: "2px solid #dbeafe",
                   borderRadius: 10,
@@ -1168,14 +1168,12 @@ export default function FamilyTreeManualPage() {
                   fontSize: 13,
                   textAlign: "right",
                   color: "#3b82f6",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 8,
                   whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                 }}
               >
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{displayName(p)}</span>
-                <span style={{ color: "#555" }}>Born {p.birthYear ?? "—"}</span>
+                {displayName(p)}
               </div>
             </div>
           );
