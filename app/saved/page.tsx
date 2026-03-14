@@ -963,7 +963,17 @@ export default function SavedPage() {
                         <div style={{ fontSize: 12, color: "#666" }}>No people yet.</div>
                       ) : (
                         <div style={{ display: "grid", gap: 6 }}>
-                          {people.map((person) => {
+                          {[...people]
+                            .sort((a, b) => {
+                              const al = (a.lastName || "").toLowerCase();
+                              const bl = (b.lastName || "").toLowerCase();
+                              if (al !== bl) return al.localeCompare(bl);
+                              const af = (a.firstName || "").toLowerCase();
+                              const bf = (b.firstName || "").toLowerCase();
+                              if (af !== bf) return af.localeCompare(bf);
+                              return (a.name || "").localeCompare(b.name || "");
+                            })
+                            .map((person) => {
                             const checked = tagIds.has(person.id);
                             return (
                               <label key={person.id} style={{ display: "flex", gap: 8, fontSize: 12 }}>

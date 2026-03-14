@@ -151,6 +151,22 @@ export default function FamilyTreeManualPage() {
       });
   }, [status]);
 
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (people.length === 0) return;
+    if (window.localStorage.getItem("photoTreeManualResetOnce") === "1") return;
+    const nextPos: Record<string, { x: number; y: number }> = {};
+    people.forEach((p) => {
+      nextPos[p.id] = { x: 0, y: 0 };
+    });
+    const nextItems = (latestItemsRef.current || []).map((it) => ({ ...it, x: 0, y: 0 }));
+    setPositions(nextPos);
+    setItems(nextItems);
+    latestPayloadRef.current = { positions: nextPos, items: nextItems };
+    void saveNow(latestPayloadRef.current);
+    window.localStorage.setItem("photoTreeManualResetOnce", "1");
+  }, [isHydrated, people.length]);
+
   async function saveNow(payload?: { positions: Record<string, { x: number; y: number }>; items: Item[] }) {
     if (status !== "authenticated") {
       setIsDirty(true);
@@ -302,7 +318,7 @@ export default function FamilyTreeManualPage() {
       if (!dragRef.current.kind || !dragRef.current.id) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      const step = Math.max(5, Math.round(cardSize / 8));
+      const step = Math.max(2, Math.round(cardSize / 32));
       const qdx = Math.round(dx / step) * step;
       const qdy = Math.round(dy / step) * step;
       const id = dragRef.current.id;
@@ -413,6 +429,7 @@ export default function FamilyTreeManualPage() {
       }
 
       if (dragRef.current.kind === "line") {
+        const baseLine = items.find((it) => it.id === id && it.kind === "line");
         const snapThreshold = 10;
         const lineLen = (it: Item) => {
           if (it.kind !== "line") return 0;
@@ -511,6 +528,24 @@ export default function FamilyTreeManualPage() {
               return { ...it, x: nx, y: ny, length: fixedLen };
           });
         });
+        if (baseLine && baseLine.kind === "line") {
+          const boundsW = containerRef.current?.scrollWidth ?? 0;
+          const boundsH = containerRef.current?.scrollHeight ?? 0;
+          const growPad = 160;
+          const growStep = 120;
+          const len = lineLen(baseLine);
+          const isVertical = baseLine.lineType === "v-black";
+          const nx = dragRef.current.originX + qdx;
+          const ny = dragRef.current.originY + qdy;
+          const maxX = isVertical ? nx : nx + len;
+          const maxY = isVertical ? ny + len : ny;
+          if (boundsW > 0 && maxX > boundsW - growPad) {
+            setCanvasSize((s) => ({ w: s.w + growStep, h: s.h }));
+          }
+          if (boundsH > 0 && maxY > boundsH - growPad) {
+            setCanvasSize((s) => ({ w: s.w, h: s.h + growStep }));
+          }
+        }
         if (dragRef.current.groupPeople && dragRef.current.mode === "move") {
           setPositions((m) => {
             const next = { ...m };
