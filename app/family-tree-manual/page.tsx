@@ -830,6 +830,21 @@ export default function FamilyTreeManualPage() {
     setPositions(next);
   }
 
+  function resetAllToOrigin() {
+    const next: Record<string, { x: number; y: number }> = {};
+    people.forEach((p) => {
+      next[p.id] = { x: 0, y: 0 };
+    });
+    setPositions(next);
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        x: 0,
+        y: 0,
+      }))
+    );
+  }
+
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const buffer = cardSize;
 
@@ -914,6 +929,7 @@ export default function FamilyTreeManualPage() {
           <button onClick={() => addLine("v-black")} style={{ fontSize: 12 }}>Add vertical black line</button>
           <button onClick={() => addLine("h-black")} style={{ fontSize: 12 }}>Add horizontal black line</button>
           <button onClick={() => addLine("h-blue")} style={{ fontSize: 12 }}>Add horizontal blue line</button>
+          <button onClick={resetAllToOrigin} style={{ fontSize: 12 }}>Reset to origin</button>
           <span
             style={{
               fontSize: 12,

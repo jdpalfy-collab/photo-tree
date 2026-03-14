@@ -91,7 +91,10 @@ function dateFromLastModified(ms?: number | null): Date | null {
 export async function POST(req: Request) {
   try {
     const form = await req.formData();
-    const files = form.getAll("files").filter(Boolean) as File[];
+    const files = [
+      ...(form.getAll("files").filter(Boolean) as File[]),
+      ...(form.getAll("file").filter(Boolean) as File[]),
+    ];
     const metaRaw = form.get("meta");
     let metaList: Array<{ createdTime?: string }> = [];
     if (metaRaw) {
@@ -102,8 +105,12 @@ export async function POST(req: Request) {
       }
     }
 
-    if (files.length === 0) {
-      return NextResponse.json({ ok: false, error: "No files uploaded" }, { status: 400 });
+    if (!files || files.length === 0) {
+      const keys = Array.from(form.keys());
+      return NextResponse.json(
+        { ok: false, error: "No files uploaded", keys },
+        { status: 400 }
+      );
     }
 
     const created: Array<{
