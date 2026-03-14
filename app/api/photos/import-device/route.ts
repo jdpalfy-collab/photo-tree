@@ -93,9 +93,14 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const files = form.getAll("files").filter(Boolean) as File[];
     const metaRaw = form.get("meta");
-    const metaList: Array<{ createdTime?: string }> = metaRaw
-      ? JSON.parse(String(metaRaw))
-      : [];
+    let metaList: Array<{ createdTime?: string }> = [];
+    if (metaRaw) {
+      try {
+        metaList = JSON.parse(String(metaRaw));
+      } catch {
+        metaList = [];
+      }
+    }
 
     if (files.length === 0) {
       return NextResponse.json({ ok: false, error: "No files uploaded" }, { status: 400 });
@@ -120,7 +125,7 @@ export async function POST(req: Request) {
         contentType: mimeType,
       });
 
-      const clientCreated = metaList[i]?.createdTime
+      const clientCreated = metaList?.[i]?.createdTime
         ? new Date(metaList[i]?.createdTime as string)
         : null;
       const clientDate =

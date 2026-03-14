@@ -445,6 +445,7 @@ export default function PickerPage() {
         return;
       }
       const newItems = Array.isArray(data?.items) ? data.items : [];
+      appendLog(`Imported ${newItems.length} device photo(s).`);
       const mapped: MediaItem[] = newItems.map((it: any) => ({
         id: it.id,
         createTime: it.createdTime,

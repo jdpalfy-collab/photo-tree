@@ -243,12 +243,8 @@ export default function FamilyTreeManualPage() {
     setPositions((prev) => {
       if (Object.keys(prev).length > 0) return prev;
       const next: Record<string, { x: number; y: number }> = {};
-      const colW = cardSize + cardSize / 2;
-      const rowH = cardHeight + cardHeight / 2;
       list.forEach((p: Person, idx) => {
-        const col = idx % 3;
-        const row = Math.floor(idx / 3);
-        next[p.id] = { x: col * colW, y: row * rowH };
+        next[p.id] = { x: 0, y: 0 };
       });
       if (!layoutApplied) {
         window.setTimeout(() => setIsHydrated(true), 0);
@@ -276,15 +272,9 @@ export default function FamilyTreeManualPage() {
     });
     setPositions((prev) => {
       const next = { ...prev };
-      const colW = cardSize + cardSize / 2;
-      const rowH = cardHeight + cardHeight / 2;
-      let idx = 0;
       people.forEach((p) => {
         if (next[p.id]) return;
-        const col = idx % 3;
-        const row = Math.floor(idx / 3);
-        next[p.id] = { x: col * colW, y: row * rowH };
-        idx += 1;
+        next[p.id] = { x: 0, y: 0 };
       });
       return next;
     });
@@ -834,12 +824,8 @@ export default function FamilyTreeManualPage() {
 
   function resetLayoutGrid() {
     const next: Record<string, { x: number; y: number }> = {};
-      const colW = cardSize + cardSize / 2;
-      const rowH = cardHeight + cardHeight / 2;
-    people.forEach((p, idx) => {
-      const col = idx % 3;
-      const row = Math.floor(idx / 3);
-      next[p.id] = { x: col * colW, y: row * rowH };
+    people.forEach((p) => {
+      next[p.id] = { x: 0, y: 0 };
     });
     setPositions(next);
   }
