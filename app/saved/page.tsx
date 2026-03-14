@@ -51,30 +51,11 @@ function displayName(p: Person) {
   return full || p.name;
 }
 
-function imageTransform(
-  p: Photo,
-  draft?: { x: number; y: number; w: number; h: number }
-) {
+function imageTransform(p: Photo) {
   const rotate = p.rotation ?? 0;
-  const crop =
-    draft && draft.w && draft.h
-      ? draft
-      : p.cropW && p.cropH
-      ? { x: p.cropX ?? 0, y: p.cropY ?? 0, w: p.cropW, h: p.cropH }
-      : null;
-  if (!crop) {
-    return rotate
-      ? ({ transformOrigin: "center", transform: `rotate(${rotate}deg)` } as React.CSSProperties)
-      : ({} as React.CSSProperties);
-  }
-  const scaleX = 1 / crop.w;
-  const scaleY = 1 / crop.h;
-  const tx = -(crop.x * 100);
-  const ty = -(crop.y * 100);
-  return {
-    transformOrigin: "top left",
-    transform: `translate(${tx}%, ${ty}%) scale(${scaleX}, ${scaleY}) rotate(${rotate}deg)`,
-  } as React.CSSProperties;
+  return rotate
+    ? ({ transformOrigin: "center", transform: `rotate(${rotate}deg)` } as React.CSSProperties)
+    : ({} as React.CSSProperties);
 }
 
 export default function SavedPage() {
@@ -378,9 +359,6 @@ export default function SavedPage() {
     if (descriptionDrafts[photoId] !== undefined) {
       await saveDescription(photoId);
     }
-    if (cropDrafts[photoId]) {
-      await saveCrop(photoId, cropDrafts[photoId]);
-    }
   }
 
   function cancelEdits(photoId: string) {
@@ -399,23 +377,6 @@ export default function SavedPage() {
       delete next[photoId];
       return next;
     });
-    setCropDrafts((m) => {
-      const next = { ...m };
-      delete next[photoId];
-      return next;
-    });
-    setCropMode((m) => ({ ...m, [photoId]: false }));
-  }
-
-  async function saveCrop(photoId: string, crop: { x: number; y: number; w: number; h: number } | null) {
-    const r = await fetch(`/api/photos/${photoId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ crop }),
-    });
-    if (r.ok) {
-      await load();
-    }
   }
 
   async function rotatePhoto(photoId: string, current: number | null | undefined) {
@@ -839,7 +800,7 @@ export default function SavedPage() {
                       background: "#f8fafc",
                       border: "2px solid #e2e8f0",
                       position: "relative",
-                      cursor: cropMode[p.id] ? "move" : "default",
+                      cursor: "default",
                     }}
                   >
                     <img
@@ -852,73 +813,9 @@ export default function SavedPage() {
                         height: "100%",
                         objectFit: "contain",
                         display: "block",
-                        ...imageTransform(p, cropDrafts[p.id]),
+                        ...imageTransform(p),
                       }}
                     />
-                    {cropMode[p.id] && cropDrafts[p.id] ? (
-                      <div
-                        style={{
-                          position: "absolute",
-                          left: `${(cropDrafts[p.id].x || 0) * 100}%`,
-                          top: `${(cropDrafts[p.id].y || 0) * 100}%`,
-                          width: `${(cropDrafts[p.id].w || 0) * 100}%`,
-                          height: `${(cropDrafts[p.id].h || 0) * 100}%`,
-                          border: "2px solid #3b82f6",
-                          background: "rgba(59,130,246,0.1)",
-                          boxSizing: "border-box",
-                        }}
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          const rect = (document.getElementById(`crop-area-${p.id}`) as HTMLDivElement)?.getBoundingClientRect();
-                          if (!rect) return;
-                          cropDragRef.current = {
-                            photoId: p.id,
-                            mode: "move",
-                            startX: e.clientX,
-                            startY: e.clientY,
-                            rect,
-                            start: cropDrafts[p.id],
-                          };
-                        }}
-                      />
-                    ) : null}
-                    {cropMode[p.id] && cropDrafts[p.id] ? (
-                      ["nw", "ne", "sw", "se"].map((pos) => (
-                        <div
-                          key={pos}
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            const rect = (document.getElementById(`crop-area-${p.id}`) as HTMLDivElement)?.getBoundingClientRect();
-                            if (!rect) return;
-                            cropDragRef.current = {
-                              photoId: p.id,
-                              mode: pos as any,
-                              startX: e.clientX,
-                              startY: e.clientY,
-                              rect,
-                              start: cropDrafts[p.id],
-                            };
-                          }}
-                          style={{
-                            position: "absolute",
-                            width: 10,
-                            height: 10,
-                            background: "#3b82f6",
-                            borderRadius: 2,
-                            left:
-                              pos.includes("w")
-                                ? `${(cropDrafts[p.id].x || 0) * 100}%`
-                                : `${((cropDrafts[p.id].x || 0) + (cropDrafts[p.id].w || 0)) * 100}%`,
-                            top:
-                              pos.includes("n")
-                                ? `${(cropDrafts[p.id].y || 0) * 100}%`
-                                : `${((cropDrafts[p.id].y || 0) + (cropDrafts[p.id].h || 0)) * 100}%`,
-                            transform: "translate(-50%, -50%)",
-                            cursor: `${pos}-resize`,
-                          }}
-                        />
-                      ))
-                    ) : null}
                   </div>
                   <div style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
                     {p.description ? (
@@ -997,35 +894,12 @@ export default function SavedPage() {
                         Rotate 90°
                       </button>
                       <button
-                        onClick={() => {
-                          setCropMode((m) => ({ ...m, [p.id]: !m[p.id] }));
-                          setCropDrafts((m) => {
-                            const next = { ...m };
-                            if (!m[p.id]) {
-                              next[p.id] = {
-                                x: p.cropX ?? 0,
-                                y: p.cropY ?? 0,
-                                w: p.cropW ?? 1,
-                                h: p.cropH ?? 1,
-                              };
-                            }
-                            return next;
-                          });
-                        }}
-                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 78 }}
-                      >
-                        {cropMode[p.id] ? "Cancel Crop" : "Crop"}
-                      </button>
-                      <button
                         onClick={() => deletePhoto(p.id)}
                         style={{ fontSize: 10, padding: "3px 6px", minWidth: 86, color: "#b91c1c" }}
                       >
                         Delete Image
                       </button>
                     </div>
-                    {cropMode[p.id] ? (
-                      <div style={{ fontSize: 11, color: "#444" }}>Drag the crop box to adjust.</div>
-                    ) : null}
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
                       <button
                         onClick={() => {

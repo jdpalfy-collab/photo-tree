@@ -405,8 +405,36 @@ export default function PickerPage() {
     setDeviceBusy(true);
     try {
       setSavedToDb(false);
+      const exifr = await import("exifr").catch(() => null);
+      const metaList = await Promise.all(
+        Array.from(files).map(async (file) => {
+          let createdTime = "";
+          if (exifr) {
+            try {
+              const exif: any = await (exifr as any).parse(file, {
+                tiff: true,
+                exif: true,
+                ifd0: true,
+              });
+              const d =
+                exif?.DateTimeOriginal ||
+                exif?.CreateDate ||
+                exif?.DateTime ||
+                exif?.ModifyDate ||
+                null;
+              if (d instanceof Date && !Number.isNaN(d.getTime())) {
+                createdTime = d.toISOString();
+              }
+            } catch {
+              // ignore EXIF parse errors
+            }
+          }
+          return { createdTime };
+        })
+      );
       const form = new FormData();
       Array.from(files).forEach((f) => form.append("files", f));
+      form.append("meta", JSON.stringify(metaList));
       const res = await fetch("/api/photos/import-device", {
         method: "POST",
         body: form,

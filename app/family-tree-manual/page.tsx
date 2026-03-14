@@ -312,7 +312,7 @@ export default function FamilyTreeManualPage() {
       if (!dragRef.current.kind || !dragRef.current.id) return;
       const dx = e.clientX - dragRef.current.startX;
       const dy = e.clientY - dragRef.current.startY;
-      const step = Math.max(20, Math.round(cardSize / 2));
+      const step = Math.max(5, Math.round(cardSize / 8));
       const qdx = Math.round(dx / step) * step;
       const qdy = Math.round(dy / step) * step;
       const id = dragRef.current.id;
@@ -822,14 +822,14 @@ export default function FamilyTreeManualPage() {
     const length = lineType === "h-black" ? cardHeight * 2 : cardHeight;
     setItems((prev) => [
       ...prev,
-      { id, kind: "line", lineType, x: 100, y: 100, length },
+      { id, kind: "line", lineType, x: 0, y: 0, length },
     ]);
     setActiveLineId(id);
   }
 
   function addHeart() {
     const id = `heart_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    setItems((prev) => [...prev, { id, kind: "heart", x: 140, y: 140 }]);
+    setItems((prev) => [...prev, { id, kind: "heart", x: 0, y: 0 }]);
   }
 
   function resetLayoutGrid() {

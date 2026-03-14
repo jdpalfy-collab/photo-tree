@@ -92,6 +92,10 @@ export async function POST(req: Request) {
   try {
     const form = await req.formData();
     const files = form.getAll("files").filter(Boolean) as File[];
+    const metaRaw = form.get("meta");
+    const metaList: Array<{ createdTime?: string }> = metaRaw
+      ? JSON.parse(String(metaRaw))
+      : [];
 
     if (files.length === 0) {
       return NextResponse.json({ ok: false, error: "No files uploaded" }, { status: 400 });
@@ -104,7 +108,8 @@ export async function POST(req: Request) {
       createdTime: string;
     }> = [];
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files[i];
       const mimeType = file.type || "image/jpeg";
       const bytes = Buffer.from(await file.arrayBuffer());
       const id = crypto.randomUUID();
@@ -115,11 +120,18 @@ export async function POST(req: Request) {
         contentType: mimeType,
       });
 
+      const clientCreated = metaList[i]?.createdTime
+        ? new Date(metaList[i]?.createdTime as string)
+        : null;
+      const clientDate =
+        clientCreated && !Number.isNaN(clientCreated.getTime()) ? clientCreated : null;
       const exifDate = parseExifDate(bytes);
       const filenameYear = yearFromFilename(file.name || "");
       const lastModifiedDate = dateFromLastModified((file as any).lastModified);
       const createdTime = exifDate
         ? exifDate.toISOString()
+        : clientDate
+        ? clientDate.toISOString()
         : filenameYear
         ? new Date(`${filenameYear}-01-01`).toISOString()
         : lastModifiedDate
