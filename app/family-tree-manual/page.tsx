@@ -151,21 +151,6 @@ export default function FamilyTreeManualPage() {
       });
   }, [status]);
 
-  useEffect(() => {
-    if (!isHydrated) return;
-    if (people.length === 0) return;
-    if (window.localStorage.getItem("photoTreeManualResetOnce") === "1") return;
-    const nextPos: Record<string, { x: number; y: number }> = {};
-    people.forEach((p) => {
-      nextPos[p.id] = { x: 0, y: 0 };
-    });
-    const nextItems = (latestItemsRef.current || []).map((it) => ({ ...it, x: 0, y: 0 }));
-    setPositions(nextPos);
-    setItems(nextItems);
-    latestPayloadRef.current = { positions: nextPos, items: nextItems };
-    void saveNow(latestPayloadRef.current);
-    window.localStorage.setItem("photoTreeManualResetOnce", "1");
-  }, [isHydrated, people.length]);
 
   async function saveNow(payload?: { positions: Record<string, { x: number; y: number }>; items: Item[] }) {
     if (status !== "authenticated") {
