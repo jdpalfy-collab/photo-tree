@@ -929,7 +929,6 @@ export default function FamilyTreeManualPage() {
           <button onClick={() => addLine("v-black")} style={{ fontSize: 12 }}>Add vertical black line</button>
           <button onClick={() => addLine("h-black")} style={{ fontSize: 12 }}>Add horizontal black line</button>
           <button onClick={() => addLine("h-blue")} style={{ fontSize: 12 }}>Add horizontal blue line</button>
-          <button onClick={resetAllToOrigin} style={{ fontSize: 12 }}>Reset to origin</button>
           <span
             style={{
               fontSize: 12,
