@@ -343,6 +343,24 @@ export default function FamilyTreeManualPage() {
             });
             return next;
           });
+          const boundsW = containerRef.current?.scrollWidth ?? 0;
+          const boundsH = containerRef.current?.scrollHeight ?? 0;
+          const growPad = 160;
+          const growStep = 120;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+          Object.values(dragRef.current.groupPeople || {}).forEach((pos) => {
+            const nx = pos.x + clamped.dx;
+            const ny = pos.y + clamped.dy;
+            if (nx + cardSize > maxX) maxX = nx + cardSize;
+            if (ny + cardHeight > maxY) maxY = ny + cardHeight;
+          });
+          if (boundsW > 0 && maxX > boundsW - growPad) {
+            setCanvasSize((s) => ({ w: s.w + growStep, h: s.h }));
+          }
+          if (boundsH > 0 && maxY > boundsH - growPad) {
+            setCanvasSize((s) => ({ w: s.w, h: s.h + growStep }));
+          }
         } else {
           const nx = dragRef.current.originX + qdx;
           const ny = dragRef.current.originY + qdy;

@@ -496,23 +496,36 @@ export default function SavedPage() {
         </select>
       </div>
       {(() => {
-        const coTags = new Map<string, string>();
+        const coTags = new Map<
+          string,
+          { firstName: string; lastName: string; name: string }
+        >();
         Object.values(tagsByPhoto).forEach((tags) => {
           (tags || []).forEach((t) => {
             const fn = t.person?.firstName || "";
             const ln = t.person?.lastName || "";
             const full = `${fn} ${ln}`.trim();
             const name = full || t.person?.name || "";
-            if (t.personId && name) coTags.set(t.personId, name);
+            if (t.personId && name) {
+              coTags.set(t.personId, { firstName: fn, lastName: ln, name });
+            }
           });
         });
-        const entries = Array.from(coTags.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+        const entries = Array.from(coTags.entries()).sort((a, b) => {
+          const al = (a[1].lastName || "").toLowerCase();
+          const bl = (b[1].lastName || "").toLowerCase();
+          if (al !== bl) return al.localeCompare(bl);
+          const af = (a[1].firstName || "").toLowerCase();
+          const bf = (b[1].firstName || "").toLowerCase();
+          if (af !== bf) return af.localeCompare(bf);
+          return (a[1].name || "").localeCompare(b[1].name || "");
+        });
         if (entries.length === 0) return null;
         return (
             <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 16, color: "#444", marginBottom: 8 }}>Filter: Only show photos with…</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-              {entries.map(([id, name]) => (
+              {entries.map(([id, meta]) => (
                 <label key={id} style={{ fontSize: 16, color: "#444" }}>
                   <input
                     type="checkbox"
@@ -520,7 +533,7 @@ export default function SavedPage() {
                     onChange={(e) => setSelectedWith((m) => ({ ...m, [id]: e.target.checked }))}
                     style={{ marginRight: 8 }}
                   />
-                  {name}
+                  {meta.name}
                 </label>
               ))}
             </div>

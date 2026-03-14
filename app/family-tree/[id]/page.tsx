@@ -516,21 +516,36 @@ export default function PersonPhotosPage() {
         <>
         <div style={{ marginBottom: 10 }}>
           {(() => {
-            const coTags = new Map<string, string>();
+            const coTags = new Map<
+              string,
+              { firstName: string; lastName: string; name: string }
+            >();
             photos.forEach((ph) => {
               (ph.tags || []).forEach((t) => {
                 if (t.person?.id && t.person.name && t.person.id !== personId) {
-                  coTags.set(t.person.id, t.person.name);
+                  coTags.set(t.person.id, {
+                    firstName: t.person.firstName || "",
+                    lastName: t.person.lastName || "",
+                    name: t.person.name,
+                  });
                 }
               });
             });
-            const entries = Array.from(coTags.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+            const entries = Array.from(coTags.entries()).sort((a, b) => {
+              const al = (a[1].lastName || "").toLowerCase();
+              const bl = (b[1].lastName || "").toLowerCase();
+              if (al !== bl) return al.localeCompare(bl);
+              const af = (a[1].firstName || "").toLowerCase();
+              const bf = (b[1].firstName || "").toLowerCase();
+              if (af !== bf) return af.localeCompare(bf);
+              return (a[1].name || "").localeCompare(b[1].name || "");
+            });
             if (entries.length === 0) return null;
             return (
                 <div style={{ display: "grid", gap: 8 }}>
                   <div style={{ fontSize: 16, color: "#444" }}>Filter: only show photos with…</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-                  {entries.map(([id, name]) => (
+                  {entries.map(([id, meta]) => (
                     <label key={id} style={{ fontSize: 16, color: "#444" }}>
                       <input
                         type="checkbox"
@@ -540,7 +555,7 @@ export default function PersonPhotosPage() {
                         }
                         style={{ marginRight: 8 }}
                       />
-                      {name}
+                      {meta.name}
                     </label>
                   ))}
                 </div>
