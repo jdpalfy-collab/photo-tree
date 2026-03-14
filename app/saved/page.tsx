@@ -99,10 +99,57 @@ export default function SavedPage() {
   const [cropDrafts, setCropDrafts] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
   const cropDragRef = React.useRef<{
     photoId: string | null;
+    mode: "move" | "nw" | "ne" | "sw" | "se" | null;
     startX: number;
     startY: number;
     rect: DOMRect | null;
-  }>({ photoId: null, startX: 0, startY: 0, rect: null });
+    start: { x: number; y: number; w: number; h: number };
+  }>({ photoId: null, mode: null, startX: 0, startY: 0, rect: null, start: { x: 0, y: 0, w: 1, h: 1 } });
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const drag = cropDragRef.current;
+      if (!drag.photoId || !drag.rect || !drag.mode) return;
+      const rect = drag.rect;
+      const dx = (e.clientX - drag.startX) / rect.width;
+      const dy = (e.clientY - drag.startY) / rect.height;
+      const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+      let { x, y, w, h } = drag.start;
+      if (drag.mode === "move") {
+        x = clamp(x + dx, 0, 1 - w);
+        y = clamp(y + dy, 0, 1 - h);
+      } else {
+        if (drag.mode.includes("n")) {
+          const ny = clamp(y + dy, 0, y + h - 0.05);
+          h = h + (y - ny);
+          y = ny;
+        }
+        if (drag.mode.includes("s")) {
+          h = clamp(h + dy, 0.05, 1 - y);
+        }
+        if (drag.mode.includes("w")) {
+          const nx = clamp(x + dx, 0, x + w - 0.05);
+          w = w + (x - nx);
+          x = nx;
+        }
+        if (drag.mode.includes("e")) {
+          w = clamp(w + dx, 0.05, 1 - x);
+        }
+      }
+      setCropDrafts((m) => ({ ...m, [drag.photoId as string]: { x, y, w, h } }));
+    }
+    function onUp() {
+      if (cropDragRef.current.photoId) {
+        cropDragRef.current = { photoId: null, mode: null, startX: 0, startY: 0, rect: null, start: { x: 0, y: 0, w: 1, h: 1 } };
+      }
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   async function load() {
     setErr("");
@@ -307,6 +354,45 @@ export default function SavedPage() {
     }
   }
 
+  async function saveAllEdits(photoId: string) {
+    if (dateDrafts[photoId] !== undefined) {
+      await saveDate(photoId);
+    }
+    if (locationDrafts[photoId] !== undefined) {
+      await saveLocation(photoId);
+    }
+    if (descriptionDrafts[photoId] !== undefined) {
+      await saveDescription(photoId);
+    }
+    if (cropDrafts[photoId]) {
+      await saveCrop(photoId, cropDrafts[photoId]);
+    }
+  }
+
+  function cancelEdits(photoId: string) {
+    setDateDrafts((m) => {
+      const next = { ...m };
+      delete next[photoId];
+      return next;
+    });
+    setLocationDrafts((m) => {
+      const next = { ...m };
+      delete next[photoId];
+      return next;
+    });
+    setDescriptionDrafts((m) => {
+      const next = { ...m };
+      delete next[photoId];
+      return next;
+    });
+    setCropDrafts((m) => {
+      const next = { ...m };
+      delete next[photoId];
+      return next;
+    });
+    setCropMode((m) => ({ ...m, [photoId]: false }));
+  }
+
   async function saveCrop(photoId: string, crop: { x: number; y: number; w: number; h: number } | null) {
     const r = await fetch(`/api/photos/${photoId}`, {
       method: "PATCH",
@@ -475,7 +561,7 @@ export default function SavedPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(420px, 1fr))",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
             gap: 16,
             maxWidth: 1600,
           }}
@@ -662,7 +748,6 @@ export default function SavedPage() {
 
       {editPhotoId && isEditing ? (
         <div
-          onClick={() => setEditPhotoId(null)}
           style={{
             position: "fixed",
             inset: 0,
@@ -711,11 +796,29 @@ export default function SavedPage() {
                 <div style={{ display: "grid", gap: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontWeight: 600 }}>Edit Photo</div>
-                    <button onClick={() => setEditPhotoId(null)} style={{ fontSize: 10, padding: "3px 6px" }}>
-                      Close
-                    </button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={async () => {
+                          await saveAllEdits(p.id);
+                          setEditPhotoId(null);
+                        }}
+                        style={{ fontSize: 10, padding: "3px 6px" }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          cancelEdits(p.id);
+                          setEditPhotoId(null);
+                        }}
+                        style={{ fontSize: 10, padding: "3px 6px", color: "#b91c1c" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                   <div
+                    id={`crop-area-${p.id}`}
                     style={{
                       width: "100%",
                       height: "60vh",
@@ -724,50 +827,14 @@ export default function SavedPage() {
                       background: "#f8fafc",
                       border: "2px solid #e2e8f0",
                       position: "relative",
-                      cursor: cropMode[p.id] ? "crosshair" : "default",
-                    }}
-                    onMouseDown={(e) => {
-                      if (!cropMode[p.id]) return;
-                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                      cropDragRef.current = { photoId: p.id, startX: e.clientX, startY: e.clientY, rect };
-                      setCropDrafts((m) => ({ ...m, [p.id]: { x: 0, y: 0, w: 0, h: 0 } }));
-                    }}
-                    onMouseMove={(e) => {
-                      const drag = cropDragRef.current;
-                      if (!drag.photoId || drag.photoId !== p.id || !drag.rect) return;
-                      const rect = drag.rect;
-                      const x1 = Math.max(rect.left, Math.min(rect.right, drag.startX));
-                      const y1 = Math.max(rect.top, Math.min(rect.bottom, drag.startY));
-                      const x2 = Math.max(rect.left, Math.min(rect.right, e.clientX));
-                      const y2 = Math.max(rect.top, Math.min(rect.bottom, e.clientY));
-                      const left = Math.min(x1, x2) - rect.left;
-                      const top = Math.min(y1, y2) - rect.top;
-                      const w = Math.abs(x2 - x1);
-                      const h = Math.abs(y2 - y1);
-                      setCropDrafts((m) => ({
-                        ...m,
-                        [p.id]: {
-                          x: left / rect.width,
-                          y: top / rect.height,
-                          w: w / rect.width,
-                          h: h / rect.height,
-                        },
-                      }));
-                    }}
-                    onMouseUp={() => {
-                      if (cropDragRef.current.photoId === p.id) {
-                        cropDragRef.current.photoId = null;
-                      }
-                    }}
-                    onMouseLeave={() => {
-                      if (cropDragRef.current.photoId === p.id) {
-                        cropDragRef.current.photoId = null;
-                      }
+                      cursor: cropMode[p.id] ? "move" : "default",
                     }}
                   >
                     <img
                       src={viewerSrc(p)}
                       alt={p.id}
+                      draggable={false}
+                      onDragStart={(e) => e.preventDefault()}
                       style={{
                         width: "100%",
                         height: "100%",
@@ -788,8 +855,59 @@ export default function SavedPage() {
                           height: `${(cropDrafts[p.id].h || 0) * 100}%`,
                           border: "2px solid #3b82f6",
                           background: "rgba(59,130,246,0.1)",
+                          boxSizing: "border-box",
+                        }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          const rect = (document.getElementById(`crop-area-${p.id}`) as HTMLDivElement)?.getBoundingClientRect();
+                          if (!rect) return;
+                          cropDragRef.current = {
+                            photoId: p.id,
+                            mode: "move",
+                            startX: e.clientX,
+                            startY: e.clientY,
+                            rect,
+                            start: cropDrafts[p.id],
+                          };
                         }}
                       />
+                    ) : null}
+                    {cropMode[p.id] && cropDrafts[p.id] ? (
+                      ["nw", "ne", "sw", "se"].map((pos) => (
+                        <div
+                          key={pos}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            const rect = (document.getElementById(`crop-area-${p.id}`) as HTMLDivElement)?.getBoundingClientRect();
+                            if (!rect) return;
+                            cropDragRef.current = {
+                              photoId: p.id,
+                              mode: pos as any,
+                              startX: e.clientX,
+                              startY: e.clientY,
+                              rect,
+                              start: cropDrafts[p.id],
+                            };
+                          }}
+                          style={{
+                            position: "absolute",
+                            width: 10,
+                            height: 10,
+                            background: "#3b82f6",
+                            borderRadius: 2,
+                            left:
+                              pos.includes("w")
+                                ? `${(cropDrafts[p.id].x || 0) * 100}%`
+                                : `${((cropDrafts[p.id].x || 0) + (cropDrafts[p.id].w || 0)) * 100}%`,
+                            top:
+                              pos.includes("n")
+                                ? `${(cropDrafts[p.id].y || 0) * 100}%`
+                                : `${((cropDrafts[p.id].y || 0) + (cropDrafts[p.id].h || 0)) * 100}%`,
+                            transform: "translate(-50%, -50%)",
+                            cursor: `${pos}-resize`,
+                          }}
+                        />
+                      ))
                     ) : null}
                   </div>
                   <div style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
@@ -860,7 +978,7 @@ export default function SavedPage() {
                         }}
                         style={{ fontSize: 10, padding: "3px 6px", minWidth: 78 }}
                       >
-                        {dateDrafts[p.id] !== undefined ? "Cancel" : "Edit Date"}
+                        Edit Date
                       </button>
                       <button
                         onClick={() => rotatePhoto(p.id, p.rotation)}
@@ -890,26 +1008,13 @@ export default function SavedPage() {
                       </button>
                       <button
                         onClick={() => deletePhoto(p.id)}
-                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 78, color: "#b91c1c" }}
+                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 86, color: "#b91c1c" }}
                       >
-                        Delete
+                        Delete Image
                       </button>
                     </div>
                     {cropMode[p.id] ? (
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button
-                          onClick={() => saveCrop(p.id, cropDrafts[p.id] || null)}
-                          style={{ fontSize: 10, padding: "3px 6px", minWidth: 110 }}
-                        >
-                          Apply crop
-                        </button>
-                        <button
-                          onClick={() => saveCrop(p.id, null)}
-                          style={{ fontSize: 10, padding: "3px 6px", minWidth: 110 }}
-                        >
-                          Clear crop
-                        </button>
-                      </div>
+                      <div style={{ fontSize: 11, color: "#444" }}>Drag the crop box to adjust.</div>
                     ) : null}
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
                       <button
@@ -936,7 +1041,7 @@ export default function SavedPage() {
                         }}
                         style={{ fontSize: 10, padding: "3px 6px", minWidth: 78 }}
                       >
-                        {locationDrafts[p.id] !== undefined ? "Cancel" : "Edit Location"}
+                        Edit Location
                       </button>
                       <button
                         onClick={() => {
@@ -962,7 +1067,7 @@ export default function SavedPage() {
                         }}
                         style={{ fontSize: 10, padding: "3px 6px", minWidth: 78 }}
                       >
-                        {descriptionDrafts[p.id] !== undefined ? "Cancel" : "Edit Description"}
+                        Edit Description
                       </button>
                     </div>
                   </div>
@@ -1040,13 +1145,6 @@ export default function SavedPage() {
                         placeholder="Year"
                         style={{ fontSize: 10, padding: "3px 6px", width: 90 }}
                       />
-                      <button
-                        onClick={() => saveDate(p.id)}
-                        disabled={dateSaving[p.id] || !dateDrafts[p.id] || dateDrafts[p.id] === createdYear}
-                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 78 }}
-                      >
-                        {dateSaving[p.id] ? "Saving..." : "Save Date"}
-                      </button>
                     </div>
                   ) : null}
                   {dateError[p.id] ? (
@@ -1061,13 +1159,6 @@ export default function SavedPage() {
                         placeholder="Location"
                         style={{ fontSize: 10, padding: "3px 6px" }}
                       />
-                      <button
-                        onClick={() => saveLocation(p.id)}
-                        disabled={locationSaving[p.id]}
-                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 78, width: "fit-content" }}
-                      >
-                        {locationSaving[p.id] ? "Saving..." : "Save Location"}
-                      </button>
                       {locationError[p.id] ? (
                         <div style={{ fontSize: 11, color: "#991b1b" }}>{locationError[p.id]}</div>
                       ) : null}
@@ -1082,13 +1173,6 @@ export default function SavedPage() {
                         rows={2}
                         style={{ fontSize: 10, padding: "3px 6px", resize: "vertical" }}
                       />
-                      <button
-                        onClick={() => saveDescription(p.id)}
-                        disabled={descriptionSaving[p.id]}
-                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 78, width: "fit-content" }}
-                      >
-                        {descriptionSaving[p.id] ? "Saving..." : "Save Description"}
-                      </button>
                       {descriptionError[p.id] ? (
                         <div style={{ fontSize: 11, color: "#991b1b" }}>{descriptionError[p.id]}</div>
                       ) : null}
