@@ -400,14 +400,14 @@ export default function PickerPage() {
     }
   }
 
-  async function importFromDevice(files: FileList | null) {
+  async function importFromDevice(files: File[] | null) {
     if (!files || files.length === 0) return;
     setDeviceBusy(true);
     try {
       setSavedToDb(false);
       const exifr = await import("exifr").catch(() => null);
       const metaList = await Promise.all(
-        Array.from(files).map(async (file) => {
+        files.map(async (file) => {
           let createdTime = "";
           if (exifr) {
             try {
@@ -433,7 +433,7 @@ export default function PickerPage() {
         })
       );
       const form = new FormData();
-      Array.from(files).forEach((f) => form.append("files", f));
+      files.forEach((f) => form.append("files", f));
       form.append("meta", JSON.stringify(metaList));
       const res = await fetch("/api/photos/import-device", {
         method: "POST",
@@ -484,7 +484,8 @@ export default function PickerPage() {
                   onChange={(e) => {
                     const files = e.target.files;
                     if (files && files.length > 0) {
-                      void importFromDevice(files);
+                      const list = Array.from(files);
+                      void importFromDevice(list);
                     }
                     e.currentTarget.value = "";
                   }}
