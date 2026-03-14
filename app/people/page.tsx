@@ -379,7 +379,17 @@ export default function PeoplePage() {
             maxWidth: 1600,
           }}
         >
-          {people.map((p) => (
+          {[...people]
+            .sort((a, b) => {
+              const al = (a.lastName || "").toLowerCase();
+              const bl = (b.lastName || "").toLowerCase();
+              if (al !== bl) return al.localeCompare(bl);
+              const af = (a.firstName || "").toLowerCase();
+              const bf = (b.firstName || "").toLowerCase();
+              if (af !== bf) return af.localeCompare(bf);
+              return (a.name || "").localeCompare(b.name || "");
+            })
+            .map((p) => (
             <div
               key={p.id}
               style={{
