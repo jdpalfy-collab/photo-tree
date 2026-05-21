@@ -103,6 +103,51 @@ export default function FamilyTreeManualPage() {
   });
   const autoFrameAppliedRef = useRef(false);
 
+  function expandCanvasFromOrigin(deltaX: number, deltaY: number) {
+    if (deltaX <= 0 && deltaY <= 0) return;
+
+    setCanvasSize((s) => ({ w: s.w + deltaX, h: s.h + deltaY }));
+    setPositions((prev) => {
+      const next: Record<string, { x: number; y: number }> = {};
+      for (const [id, pos] of Object.entries(prev)) {
+        next[id] = { x: pos.x + deltaX, y: pos.y + deltaY };
+      }
+      return next;
+    });
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        x: it.x + deltaX,
+        y: it.y + deltaY,
+      }))
+    );
+
+    dragRef.current.originX += deltaX;
+    dragRef.current.originY += deltaY;
+    if (dragRef.current.groupPeople) {
+      dragRef.current.groupPeople = Object.fromEntries(
+        Object.entries(dragRef.current.groupPeople).map(([id, pos]) => [
+          id,
+          { x: pos.x + deltaX, y: pos.y + deltaY },
+        ])
+      );
+    }
+    if (dragRef.current.groupItems) {
+      dragRef.current.groupItems = Object.fromEntries(
+        Object.entries(dragRef.current.groupItems).map(([id, pos]) => [
+          id,
+          { ...pos, x: pos.x + deltaX, y: pos.y + deltaY },
+        ])
+      );
+    }
+
+    window.requestAnimationFrame(() => {
+      if (!containerRef.current) return;
+      containerRef.current.scrollLeft += deltaX;
+      containerRef.current.scrollTop += deltaY;
+    });
+  }
+
   useEffect(() => {
     if (status !== "authenticated") return;
     let didSet = false;
@@ -347,14 +392,23 @@ export default function FamilyTreeManualPage() {
           const boundsH = containerRef.current?.scrollHeight ?? 0;
           const growPad = 160;
           const growStep = 120;
+          let minX = Infinity;
+          let minY = Infinity;
           let maxX = -Infinity;
           let maxY = -Infinity;
           Object.values(dragRef.current.groupPeople || {}).forEach((pos) => {
             const nx = pos.x + clamped.dx;
             const ny = pos.y + clamped.dy;
+            if (nx < minX) minX = nx;
+            if (ny < minY) minY = ny;
             if (nx + cardSize > maxX) maxX = nx + cardSize;
             if (ny + cardHeight > maxY) maxY = ny + cardHeight;
           });
+          const shiftX = qdx < 0 && minX <= edgePad ? growStep : 0;
+          const shiftY = qdy < 0 && minY <= edgePad ? growStep : 0;
+          if (shiftX || shiftY) {
+            expandCanvasFromOrigin(shiftX, shiftY);
+          }
           if (boundsW > 0 && maxX > boundsW - growPad) {
             setCanvasSize((s) => ({ w: s.w + growStep, h: s.h }));
           }
@@ -375,6 +429,11 @@ export default function FamilyTreeManualPage() {
           // slow canvas expansion when dragging near edges
           const growPad = 160;
           const growStep = 120;
+          const shiftX = qdx < 0 && clampedX <= edgePad ? growStep : 0;
+          const shiftY = qdy < 0 && clampedY <= edgePad ? growStep : 0;
+          if (shiftX || shiftY) {
+            expandCanvasFromOrigin(shiftX, shiftY);
+          }
           if (boundsW > 0 && clampedX + cardSize > boundsW - growPad) {
             setCanvasSize((s) => ({ w: s.w + growStep, h: s.h }));
           }
@@ -542,6 +601,11 @@ export default function FamilyTreeManualPage() {
           const ny = dragRef.current.originY + qdy;
           const maxX = isVertical ? nx : nx + len;
           const maxY = isVertical ? ny + len : ny;
+          const shiftX = qdx < 0 && nx <= edgePad ? growStep : 0;
+          const shiftY = qdy < 0 && ny <= edgePad ? growStep : 0;
+          if (shiftX || shiftY) {
+            expandCanvasFromOrigin(shiftX, shiftY);
+          }
           if (boundsW > 0 && maxX > boundsW - growPad) {
             setCanvasSize((s) => ({ w: s.w + growStep, h: s.h }));
           }
