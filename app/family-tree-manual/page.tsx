@@ -158,6 +158,80 @@ export default function FamilyTreeManualPage() {
     });
   }
 
+  function getLayoutBounds(
+    layoutPositions: Record<string, { x: number; y: number }>,
+    layoutItems: Item[]
+  ) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    Object.values(layoutPositions).forEach((p) => {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + cardSize);
+      maxY = Math.max(maxY, p.y + cardHeight);
+    });
+
+    layoutItems.forEach((it) => {
+      if (it.kind === "heart") {
+        minX = Math.min(minX, it.x);
+        minY = Math.min(minY, it.y);
+        maxX = Math.max(maxX, it.x + 18);
+        maxY = Math.max(maxY, it.y + 18);
+        return;
+      }
+
+      const isVertical = it.lineType === "v-black";
+      const len = it.lineType === "h-black" ? cardHeight * 2 : cardHeight;
+      const w = isVertical ? lineThickness : len;
+      const h = isVertical ? len : lineThickness;
+      minX = Math.min(minX, it.x);
+      minY = Math.min(minY, it.y);
+      maxX = Math.max(maxX, it.x + w);
+      maxY = Math.max(maxY, it.y + h);
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+      return { minX: 0, minY: 0, maxX: cardSize, maxY: cardHeight };
+    }
+
+    return { minX, minY, maxX, maxY };
+  }
+
+  function normalizeLayoutForSave(payload: {
+    positions: Record<string, { x: number; y: number }>;
+    items: Item[];
+  }) {
+    const bounds = getLayoutBounds(payload.positions, payload.items);
+    const dx = buffer - bounds.minX;
+    const dy = buffer - bounds.minY;
+    const nextPositions: Record<string, { x: number; y: number }> = {};
+
+    for (const [id, pos] of Object.entries(payload.positions)) {
+      nextPositions[id] = { x: pos.x + dx, y: pos.y + dy };
+    }
+
+    const nextItems = payload.items.map((it) => ({
+      ...it,
+      x: it.x + dx,
+      y: it.y + dy,
+    }));
+
+    const width = Math.max(800, Math.ceil(bounds.maxX - bounds.minX + buffer * 2));
+    const height = Math.max(800, Math.ceil(bounds.maxY - bounds.minY + buffer * 2));
+    const changed = dx !== 0 || dy !== 0 || width !== canvasSize.w || height !== canvasSize.h;
+
+    return {
+      payload: { positions: nextPositions, items: nextItems },
+      canvasSize: { w: width, h: height },
+      changed,
+      dx,
+      dy,
+    };
+  }
+
   useEffect(() => {
     if (status !== "authenticated") return;
     let didSet = false;
@@ -212,8 +286,22 @@ export default function FamilyTreeManualPage() {
       setIsDirty(true);
       return;
     }
-    const data = payload || latestPayloadRef.current || { positions, items };
+    const rawData = payload || latestPayloadRef.current || { positions, items };
+    const normalized = normalizeLayoutForSave(rawData);
+    const data = normalized.payload;
     latestPayloadRef.current = data;
+    if (normalized.changed) {
+      setPositions(data.positions);
+      setItems(data.items);
+      setCanvasSize(normalized.canvasSize);
+      window.localStorage.setItem("photoTreeManualState", JSON.stringify(data));
+      window.requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollLeft = Math.max(0, containerRef.current.scrollLeft + normalized.dx);
+          containerRef.current.scrollTop = Math.max(0, containerRef.current.scrollTop + normalized.dy);
+        }
+      });
+    }
     setSaveStatus("saving");
     setSaveError("");
     try {
