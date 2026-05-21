@@ -142,9 +142,19 @@ export default function FamilyTreeManualPage() {
     }
 
     window.requestAnimationFrame(() => {
-      if (!containerRef.current) return;
-      containerRef.current.scrollLeft += deltaX;
-      containerRef.current.scrollTop += deltaY;
+      const container = containerRef.current;
+      if (!container) return;
+
+      const canScrollX = container.scrollWidth > container.clientWidth + 1;
+      const canScrollY = container.scrollHeight > container.clientHeight + 1;
+      if (canScrollX) container.scrollLeft += deltaX;
+      if (canScrollY) container.scrollTop += deltaY;
+
+      window.scrollBy({
+        left: canScrollX ? 0 : deltaX,
+        top: canScrollY ? 0 : deltaY,
+        behavior: "instant",
+      });
     });
   }
 
@@ -392,6 +402,7 @@ export default function FamilyTreeManualPage() {
           const boundsH = containerRef.current?.scrollHeight ?? 0;
           const growPad = 160;
           const growStep = 120;
+          const originGrowStep = Math.max(12, step * 2);
           let minX = Infinity;
           let minY = Infinity;
           let maxX = -Infinity;
@@ -404,8 +415,8 @@ export default function FamilyTreeManualPage() {
             if (nx + cardSize > maxX) maxX = nx + cardSize;
             if (ny + cardHeight > maxY) maxY = ny + cardHeight;
           });
-          const shiftX = qdx < 0 && minX <= edgePad ? growStep : 0;
-          const shiftY = qdy < 0 && minY <= edgePad ? growStep : 0;
+          const shiftX = qdx < 0 && minX <= edgePad ? originGrowStep : 0;
+          const shiftY = qdy < 0 && minY <= edgePad ? originGrowStep : 0;
           if (shiftX || shiftY) {
             expandCanvasFromOrigin(shiftX, shiftY);
           }
@@ -429,8 +440,9 @@ export default function FamilyTreeManualPage() {
           // slow canvas expansion when dragging near edges
           const growPad = 160;
           const growStep = 120;
-          const shiftX = qdx < 0 && clampedX <= edgePad ? growStep : 0;
-          const shiftY = qdy < 0 && clampedY <= edgePad ? growStep : 0;
+          const originGrowStep = Math.max(12, step * 2);
+          const shiftX = qdx < 0 && clampedX <= edgePad ? originGrowStep : 0;
+          const shiftY = qdy < 0 && clampedY <= edgePad ? originGrowStep : 0;
           if (shiftX || shiftY) {
             expandCanvasFromOrigin(shiftX, shiftY);
           }
@@ -595,14 +607,15 @@ export default function FamilyTreeManualPage() {
           const boundsH = containerRef.current?.scrollHeight ?? 0;
           const growPad = 160;
           const growStep = 120;
+          const originGrowStep = Math.max(12, step * 2);
           const len = lineLen(baseLine);
           const isVertical = baseLine.lineType === "v-black";
           const nx = dragRef.current.originX + qdx;
           const ny = dragRef.current.originY + qdy;
           const maxX = isVertical ? nx : nx + len;
           const maxY = isVertical ? ny + len : ny;
-          const shiftX = qdx < 0 && nx <= edgePad ? growStep : 0;
-          const shiftY = qdy < 0 && ny <= edgePad ? growStep : 0;
+          const shiftX = qdx < 0 && nx <= edgePad ? originGrowStep : 0;
+          const shiftY = qdy < 0 && ny <= edgePad ? originGrowStep : 0;
           if (shiftX || shiftY) {
             expandCanvasFromOrigin(shiftX, shiftY);
           }
