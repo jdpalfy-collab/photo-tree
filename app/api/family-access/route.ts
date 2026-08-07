@@ -7,13 +7,14 @@ import {
   familyAccessRequired,
   verifyFamilyAccessCookie,
 } from "@/app/lib/family-access";
+import { emailAllowlistRequired } from "@/app/lib/email-allowlist";
 
 export async function GET(req: NextRequest) {
   const required = familyAccessRequired();
   const unlocked = await verifyFamilyAccessCookie(req.cookies.get(FAMILY_ACCESS_COOKIE)?.value);
 
   return NextResponse.json(
-    { ok: true, required, unlocked },
+    { ok: true, required, unlocked, emailAllowlistRequired: emailAllowlistRequired() },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

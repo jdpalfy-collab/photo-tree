@@ -10,6 +10,7 @@ type FamilyAccessState = {
   loading: boolean;
   required: boolean;
   unlocked: boolean;
+  emailAllowlistRequired: boolean;
 };
 
 export default function Home() {
@@ -20,6 +21,7 @@ export default function Home() {
     loading: true,
     required: false,
     unlocked: false,
+    emailAllowlistRequired: false,
   });
   const [inviteCode, setInviteCode] = useState("");
   const [inviteError, setInviteError] = useState("");
@@ -38,11 +40,12 @@ export default function Home() {
           loading: false,
           required: Boolean(data?.required),
           unlocked: Boolean(data?.unlocked),
+          emailAllowlistRequired: Boolean(data?.emailAllowlistRequired),
         });
       })
       .catch(() => {
         if (cancelled) return;
-        setFamilyAccess({ loading: false, required: false, unlocked: true });
+        setFamilyAccess({ loading: false, required: false, unlocked: true, emailAllowlistRequired: false });
       });
     return () => {
       cancelled = true;
@@ -85,6 +88,7 @@ export default function Home() {
         loading: false,
         required: Boolean(data?.required),
         unlocked: Boolean(data?.unlocked),
+        emailAllowlistRequired: Boolean(data?.emailAllowlistRequired),
       });
       setInviteCode("");
     } finally {

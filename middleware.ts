@@ -6,6 +6,7 @@ import {
   familyAccessRequired,
   verifyFamilyAccessCookie,
 } from "@/app/lib/family-access";
+import { emailAllowlistRequired, emailIsAllowed } from "@/app/lib/email-allowlist";
 
 const PUBLIC_FILE = /\.(.*)$/;
 const NATIVE_USER_AGENT = "PhotoTreeNative/";
@@ -109,6 +110,19 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = "/";
     url.searchParams.set("from", "unauth");
+    return NextResponse.redirect(url);
+  }
+
+  if (!emailIsAllowed(token.email)) {
+    if (pathname.startsWith("/api")) {
+      return NextResponse.json(
+        { ok: false, error: "This email is not on the PhotoTree invite list." },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    url.searchParams.set("from", "email");
     return NextResponse.redirect(url);
   }
 

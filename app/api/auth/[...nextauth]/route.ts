@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import { emailIsAllowed } from "@/app/lib/email-allowlist";
 
 const handler = NextAuth({
   session: { strategy: "jwt" },
@@ -19,6 +20,10 @@ const handler = NextAuth({
     }),
   ],
   callbacks: {
+    async signIn({ profile }) {
+      const email = typeof profile?.email === "string" ? profile.email : null;
+      return emailIsAllowed(email);
+    },
     async jwt({ token, account }) {
       // First time user signs in, persist the access_token to the token
       if (account?.access_token) {
