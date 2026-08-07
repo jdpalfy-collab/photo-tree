@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEditingMode } from "../../providers";
+import PhotoLightbox from "../../ui/photo-lightbox";
+import MobileScrollTracker from "../../ui/mobile-scroll-tracker";
+import MobileGalleryHeaderStatus from "../../ui/mobile-gallery-header-status";
 
 type Person = {
   id: string;
@@ -15,6 +17,13 @@ type Person = {
   profileZoom?: number | null;
   profileX?: number | null;
   profileY?: number | null;
+};
+
+type PersonLike = {
+  id: string;
+  name: string;
+  firstName?: string | null;
+  lastName?: string | null;
 };
 
 type Photo = {
@@ -43,6 +52,24 @@ function proxyImgUrl(baseUrl: string, photoId: string, w = 600, h = 600) {
   )}&w=${w}&h=${h}&cb=${Date.now()}`;
 }
 
+const PROFILE_CROP_MIN_ZOOM = 0.6;
+const PROFILE_CROP_MAX_ZOOM = 8;
+
+function clampProfileZoom(value: number) {
+  return Math.max(PROFILE_CROP_MIN_ZOOM, Math.min(PROFILE_CROP_MAX_ZOOM, Math.round(value * 100) / 100));
+}
+
+function profileZoomProgress(value: number) {
+  const zoom = clampProfileZoom(value);
+  return `${((zoom - PROFILE_CROP_MIN_ZOOM) / (PROFILE_CROP_MAX_ZOOM - PROFILE_CROP_MIN_ZOOM)) * 100}%`;
+}
+
+function touchDistance(touches: { [index: number]: { clientX: number; clientY: number } }) {
+  const first = touches[0];
+  const second = touches[1];
+  return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+}
+
 export default function PersonPhotosPage() {
   const { mode } = useEditingMode();
   const isEditing = mode === "editing";
@@ -50,6 +77,7 @@ export default function PersonPhotosPage() {
   const searchParams = useSearchParams();
   const personId = typeof params?.id === "string" ? params.id : "";
   const from = searchParams?.get("from");
+  const sourcePhotoId = searchParams?.get("photoId") || "";
   const [person, setPerson] = useState<Person | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -64,61 +92,6 @@ export default function PersonPhotosPage() {
   const [descriptionDrafts, setDescriptionDrafts] = useState<Record<string, string>>({});
   const [descriptionSaving, setDescriptionSaving] = useState<Record<string, boolean>>({});
   const [descriptionError, setDescriptionError] = useState<Record<string, string>>({});
-  const [cropMode, setCropMode] = useState<Record<string, boolean>>({});
-  const [cropDrafts, setCropDrafts] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
-  const cropDragRef = React.useRef<{
-    photoId: string | null;
-    mode: "move" | "nw" | "ne" | "sw" | "se" | null;
-    startX: number;
-    startY: number;
-    rect: DOMRect | null;
-    start: { x: number; y: number; w: number; h: number };
-  }>({ photoId: null, mode: null, startX: 0, startY: 0, rect: null, start: { x: 0, y: 0, w: 1, h: 1 } });
-
-  useEffect(() => {
-    function onMove(e: MouseEvent) {
-      const drag = cropDragRef.current;
-      if (!drag.photoId || !drag.rect || !drag.mode) return;
-      const rect = drag.rect;
-      const dx = (e.clientX - drag.startX) / rect.width;
-      const dy = (e.clientY - drag.startY) / rect.height;
-      const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-      let { x, y, w, h } = drag.start;
-      if (drag.mode === "move") {
-        x = clamp(x + dx, 0, 1 - w);
-        y = clamp(y + dy, 0, 1 - h);
-      } else {
-        if (drag.mode.includes("n")) {
-          const ny = clamp(y + dy, 0, y + h - 0.05);
-          h = h + (y - ny);
-          y = ny;
-        }
-        if (drag.mode.includes("s")) {
-          h = clamp(h + dy, 0.05, 1 - y);
-        }
-        if (drag.mode.includes("w")) {
-          const nx = clamp(x + dx, 0, x + w - 0.05);
-          w = w + (x - nx);
-          x = nx;
-        }
-        if (drag.mode.includes("e")) {
-          w = clamp(w + dx, 0.05, 1 - x);
-        }
-      }
-      setCropDrafts((m) => ({ ...m, [drag.photoId as string]: { x, y, w, h } }));
-    }
-    function onUp() {
-      if (cropDragRef.current.photoId) {
-        cropDragRef.current = { photoId: null, mode: null, startX: 0, startY: 0, rect: null, start: { x: 0, y: 0, w: 1, h: 1 } } as any;
-      }
-    }
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, []);
   const [selectedWith, setSelectedWith] = useState<Record<string, boolean>>({});
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -132,6 +105,43 @@ export default function PersonPhotosPage() {
     lastName: "",
     birthYear: "",
   });
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [profileFirst, setProfileFirst] = useState("");
+  const [profileLast, setProfileLast] = useState("");
+  const [profileBirth, setProfileBirth] = useState("");
+  const [profilePhotoIdDraft, setProfilePhotoIdDraft] = useState<string | null>(null);
+  const [profileZoomDraft, setProfileZoomDraft] = useState(1);
+  const [profileXDraft, setProfileXDraft] = useState(0);
+  const [profileYDraft, setProfileYDraft] = useState(0);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profilePhotoPickerOpen, setProfilePhotoPickerOpen] = useState(false);
+  const profileCropDragRef = React.useRef<{
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    startCropX: number;
+    startCropY: number;
+    width: number;
+    height: number;
+  }>({ pointerId: null, startX: 0, startY: 0, startCropX: 0, startCropY: 0, width: 1, height: 1 });
+  const profileTouchRef = React.useRef<
+    | {
+        mode: "drag";
+        startX: number;
+        startY: number;
+        startCropX: number;
+        startCropY: number;
+        width: number;
+        height: number;
+      }
+    | {
+        mode: "pinch";
+        startDistance: number;
+        startZoom: number;
+      }
+    | null
+  >(null);
 
   async function load() {
     setErr("");
@@ -158,10 +168,27 @@ export default function PersonPhotosPage() {
     setPhotos(Array.isArray(j?.photos) ? j.photos : []);
   }
 
-  function displayName(p: Person | null) {
+  function displayName(p: PersonLike | null) {
     if (!p) return "Person";
     const full = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim();
-    return full || p.name;
+    return full || p.name || "Person";
+  }
+
+  function comparePeopleByLastFirst(a: PersonLike, b: PersonLike) {
+    const al = (a.lastName || "").toLowerCase();
+    const bl = (b.lastName || "").toLowerCase();
+    if (al !== bl) return al.localeCompare(bl);
+    const af = (a.firstName || "").toLowerCase();
+    const bf = (b.firstName || "").toLowerCase();
+    if (af !== bf) return af.localeCompare(bf);
+    return displayName(a).localeCompare(displayName(b));
+  }
+
+  function photoNameTokenClass(name: string) {
+    const compactLength = name.replace(/\s+/g, "").length;
+    if (compactLength >= 18) return "mobile-photo-name-token mobile-photo-name-token--extra-long";
+    if (compactLength >= 13) return "mobile-photo-name-token mobile-photo-name-token--long";
+    return "mobile-photo-name-token";
   }
 
   function imageTransform(p: Photo) {
@@ -169,6 +196,157 @@ export default function PersonPhotosPage() {
     return rotate
       ? ({ transformOrigin: "center", transform: `rotate(${rotate}deg)` } as React.CSSProperties)
       : ({} as React.CSSProperties);
+  }
+
+  function photoSrc(p: Photo, w = 600, h = 600) {
+    return p.storageUrl
+      ? p.storageUrl
+      : p.localPath
+      ? p.localPath
+      : proxyImgUrl(p.baseUrl, p.id, w, h);
+  }
+
+  function openProfileEditor() {
+    if (!person) return;
+    setProfileFirst(person.firstName ?? "");
+    setProfileLast(person.lastName ?? "");
+    setProfileBirth(person.birthYear ? String(person.birthYear) : "");
+    setProfilePhotoIdDraft(person.profilePhotoId ?? null);
+    setProfileZoomDraft(clampProfileZoom(person.profileZoom ?? 1));
+    setProfileXDraft(person.profileX ?? 0);
+    setProfileYDraft(person.profileY ?? 0);
+    setProfileError("");
+    setProfilePhotoPickerOpen(false);
+    setProfileEditOpen(true);
+    profileTouchRef.current = null;
+    profileCropDragRef.current.pointerId = null;
+  }
+
+  function startProfileTouch(e: React.TouchEvent<HTMLDivElement>) {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      profileCropDragRef.current.pointerId = null;
+      profileTouchRef.current = {
+        mode: "pinch",
+        startDistance: touchDistance(e.touches),
+        startZoom: profileZoomDraft,
+      };
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const touch = e.touches[0];
+      profileTouchRef.current = {
+        mode: "drag",
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startCropX: profileXDraft,
+        startCropY: profileYDraft,
+        width: rect.width || 1,
+        height: rect.height || 1,
+      };
+    }
+  }
+
+  function moveProfileTouch(e: React.TouchEvent<HTMLDivElement>) {
+    const state = profileTouchRef.current;
+    if (!state) return;
+
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const distance = touchDistance(e.touches);
+      const startDistance = state.mode === "pinch" ? state.startDistance : distance;
+      const startZoom = state.mode === "pinch" ? state.startZoom : profileZoomDraft;
+      if (startDistance <= 0) return;
+      setProfileZoomDraft(clampProfileZoom(startZoom * (distance / startDistance)));
+      if (state.mode !== "pinch") {
+        profileTouchRef.current = {
+          mode: "pinch",
+          startDistance: distance,
+          startZoom,
+        };
+      }
+      return;
+    }
+
+    if (state.mode === "drag" && e.touches.length === 1) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const dx = touch.clientX - state.startX;
+      const dy = touch.clientY - state.startY;
+      const nx = state.startCropX + (dx / state.width) * 100;
+      const ny = state.startCropY + (dy / state.height) * 100;
+      setProfileXDraft(nx);
+      setProfileYDraft(ny);
+    }
+  }
+
+  function endProfileTouch(e: React.TouchEvent<HTMLDivElement>) {
+    if (e.touches.length === 1) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const touch = e.touches[0];
+      profileTouchRef.current = {
+        mode: "drag",
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startCropX: profileXDraft,
+        startCropY: profileYDraft,
+        width: rect.width || 1,
+        height: rect.height || 1,
+      };
+      return;
+    }
+    profileTouchRef.current = null;
+  }
+
+  async function saveProfileEdits() {
+    if (!person) return;
+    const firstName = profileFirst.trim();
+    const lastName = profileLast.trim();
+    if (!firstName || !lastName) {
+      setProfileError("First and last name are required.");
+      return;
+    }
+    const birthRaw = profileBirth.trim();
+    const birthYear = birthRaw === "" ? null : Number(birthRaw);
+    if (birthRaw !== "" && !Number.isInteger(birthYear)) {
+      setProfileError("Birth year must be an integer.");
+      return;
+    }
+
+    setProfileSaving(true);
+    setProfileError("");
+    try {
+      const r = await fetch(`/api/people/${person.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          birthYear,
+          profilePhotoId: profilePhotoIdDraft,
+          profileZoom: clampProfileZoom(profileZoomDraft),
+          profileX: profileXDraft,
+          profileY: profileYDraft,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setProfileError(JSON.stringify(j));
+        return;
+      }
+      const updated = j?.person as Person;
+      if (updated?.id) {
+        setPerson(updated);
+        setPeople((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      }
+      setProfileEditOpen(false);
+      await load();
+    } finally {
+      setProfileSaving(false);
+    }
   }
 
   async function addNewPersonFromEdit(photoId: string) {
@@ -341,6 +519,17 @@ export default function PersonPhotosPage() {
     }
   }
 
+  async function saveAllEdits(photoId: string, created: string) {
+    if (dateDrafts[photoId] !== undefined) {
+      await saveDate(photoId, created);
+    }
+    if (locationDrafts[photoId] !== undefined) {
+      await saveLocation(photoId);
+    }
+    if (descriptionDrafts[photoId] !== undefined) {
+      await saveDescription(photoId);
+    }
+  }
 
   function cancelEdits(photoId: string) {
     setDateDrafts((m) => {
@@ -358,12 +547,6 @@ export default function PersonPhotosPage() {
       delete next[photoId];
       return next;
     });
-    setCropDrafts((m) => {
-      const next = { ...m };
-      delete next[photoId];
-      return next;
-    });
-    setCropMode((m) => ({ ...m, [photoId]: false }));
   }
 
   async function rotatePhoto(photoId: string, current: number | null | undefined) {
@@ -425,24 +608,82 @@ export default function PersonPhotosPage() {
       });
   }
 
-  useEffect(() => {
-    if (!viewerOpen) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setViewerOpen(false);
-      } else if (e.key === "ArrowLeft") {
-        setViewerIndex((i) => (i > 0 ? i - 1 : i));
-      } else if (e.key === "ArrowRight") {
-        setViewerIndex((i) => (i < filteredPhotos().length - 1 ? i + 1 : i));
+  const selectedPeople = people.filter((candidate) => selectedWith[candidate.id]);
+  const personFilterMap = new Map<string, PersonLike>();
+  photos.forEach((photo) => {
+    (photo.tags || []).forEach((tag) => {
+      if (tag.person?.id && tag.person.id !== personId) {
+        personFilterMap.set(tag.person.id, tag.person);
       }
+    });
+  });
+  const personFilterPeople = Array.from(personFilterMap.values()).sort(comparePeopleByLastFirst);
+  const personFilterStatus = soloOnly
+    ? selectedPeople.length > 0
+      ? `Solo + ${selectedPeople.length}`
+      : "Solo"
+    : selectedPeople.length === 0
+    ? "All"
+    : selectedPeople.length === 1
+    ? displayName(selectedPeople[0])
+    : `${selectedPeople.length} people`;
+  const personSortStatus = sortMode === "recent" ? "Most recent" : "Chronological";
+  const sourceTab = from === "people" || from === "photos" || from === "tree" ? from : "tree";
+  const backTarget =
+    sourceTab === "people"
+      ? { href: "/people", label: "People" }
+      : sourceTab === "photos"
+      ? {
+          href: sourcePhotoId ? `/saved?photoId=${encodeURIComponent(sourcePhotoId)}` : "/saved",
+          label: "Photos",
+        }
+      : { href: "/family-tree-manual", label: "Tree" };
+
+  function personGalleryHref(nextPersonId: string, photoId = sourcePhotoId) {
+    const params = new URLSearchParams({ from: sourceTab });
+    if (sourceTab === "photos") {
+      const targetPhotoId = sourcePhotoId || photoId;
+      if (targetPhotoId) params.set("photoId", targetPhotoId);
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewerOpen, photos.length, sortMode, JSON.stringify(selectedWith)]);
+    return `/family-tree/${encodeURIComponent(nextPersonId)}?${params.toString()}`;
+  }
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
+      <MobileScrollTracker />
+      <MobileGalleryHeaderStatus
+        personName={person ? displayName(person) : "Person"}
+        personId={personId}
+        personOptions={people
+          .map((candidate) => ({ id: candidate.id, label: displayName(candidate) }))
+          .sort((a, b) => a.label.localeCompare(b.label))}
+        onPersonChange={(nextPersonId) => {
+          window.location.href = personGalleryHref(nextPersonId);
+        }}
+        filterValue={personFilterStatus}
+        filterOptions={[
+          ...personFilterPeople.map((candidate) => ({
+            id: candidate.id,
+            label: displayName(candidate),
+            checked: !!selectedWith[candidate.id],
+          })),
+          { id: "__solo__", label: "Solo", checked: soloOnly },
+        ]}
+        onFilterChange={(filterId, checked) => {
+          if (filterId === "__solo__") {
+            setSoloOnly(checked);
+            return;
+          }
+          setSelectedWith((current) => ({ ...current, [filterId]: checked }));
+        }}
+        sortValue={personSortStatus}
+        sortMode={sortMode}
+        sortOptions={[
+          { value: "chronological", label: "Chronological" },
+          { value: "recent", label: "Most recent" },
+        ]}
+        onSortChange={(value) => setSortMode(value as "chronological" | "recent")}
+      />
       <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
         <div
           style={{
@@ -488,7 +729,18 @@ export default function PersonPhotosPage() {
           )}
         </div>
         <div>
-          <h1 style={{ margin: 0 }}>{displayName(person)}</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <h1 style={{ margin: 0 }}>{displayName(person)}</h1>
+            {isEditing && person ? (
+              <button
+                type="button"
+                onClick={openProfileEditor}
+                style={{ fontSize: 12, padding: "5px 10px", minHeight: 30 }}
+              >
+                Edit
+              </button>
+            ) : null}
+          </div>
           {person ? (
             <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>
               Birth year: {person.birthYear ?? "—"}
@@ -497,9 +749,9 @@ export default function PersonPhotosPage() {
         </div>
       </div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-        <Link href={from === "people" ? "/people" : "/family-tree-manual"}>
-          ← Back to {from === "people" ? "People" : "Tree"}
-        </Link>
+        <a href={backTarget.href}>
+          ← Back to {backTarget.label}
+        </a>
       </div>
 
       <div style={{ marginBottom: 12 }} />
@@ -514,7 +766,7 @@ export default function PersonPhotosPage() {
         <div style={{ color: "#666" }}>No tagged photos.</div>
       ) : (
         <>
-        <div style={{ marginBottom: 10 }}>
+        <div className="mobile-control-row">
           {(() => {
             const coTags = new Map<
               string,
@@ -540,11 +792,12 @@ export default function PersonPhotosPage() {
               if (af !== bf) return af.localeCompare(bf);
               return (a[1].name || "").localeCompare(b[1].name || "");
             });
-            if (entries.length === 0) return null;
             return (
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontSize: 16, color: "#444" }}>Filter: only show photos with…</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              <details className="mobile-filter-dropdown mobile-filter-dropdown--wide">
+                <summary>
+                  Filter
+                </summary>
+                <div className="mobile-filter-options mobile-filter-options--wide" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
                   {entries.map(([id, meta]) => (
                     <label key={id} style={{ fontSize: 16, color: "#444" }}>
                       <input
@@ -558,36 +811,35 @@ export default function PersonPhotosPage() {
                       {meta.name}
                     </label>
                   ))}
+                  <label style={{ fontSize: 16, color: "#444" }}>
+                    <input
+                      type="checkbox"
+                      checked={soloOnly}
+                      onChange={(e) => setSoloOnly(e.target.checked)}
+                      style={{ marginRight: 8 }}
+                    />
+                    Solo
+                  </label>
                 </div>
-              </div>
+              </details>
             );
           })()}
-          <div style={{ marginTop: 8 }}>
-            <label style={{ fontSize: 16, color: "#444" }}>
-              <input
-                type="checkbox"
-                checked={soloOnly}
-                onChange={(e) => setSoloOnly(e.target.checked)}
-                style={{ marginRight: 8 }}
-              />
-              Solo
-            </label>
+          <div className="mobile-sort-control">
+            <label style={{ fontSize: 16, color: "#444" }} htmlFor="sortModePerson">Sort</label>
+            <select
+              id="sortModePerson"
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as "chronological" | "recent")}
+              className="mobile-sort-select"
+              style={{ fontSize: 16, padding: "6px 10px" }}
+            >
+              <option value="chronological">Chronological</option>
+              <option value="recent">Most recent</option>
+            </select>
           </div>
         </div>
-
-      <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <label style={{ fontSize: 16, color: "#444" }} htmlFor="sortModePerson">Sort</label>
-          <select
-            id="sortModePerson"
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as "chronological" | "recent")}
-            style={{ fontSize: 16, padding: "6px 10px" }}
-          >
-            <option value="chronological">Chronological (oldest → newest)</option>
-            <option value="recent">Most recent (newest → oldest)</option>
-          </select>
-        </div>
         <div
+          className="mobile-card-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -605,20 +857,23 @@ export default function PersonPhotosPage() {
                 : proxyImgUrl(p.baseUrl, p.id, 800, 800);
               const created = p.createdTime ? new Date(p.createdTime).toISOString().slice(0, 10) : "";
               const createdYear = created ? created.slice(0, 4) : "";
-              const thisName = displayName(person);
+              const cardHeadline = [p.description, createdYear].filter(Boolean).join(", ");
               const others = (p.tags || [])
-              .map((t) => {
-                const fn = t.person?.firstName || "";
-                const ln = t.person?.lastName || "";
-                const full = `${fn} ${ln}`.trim();
-                return full || t.person?.name || "";
-              })
-              .filter(Boolean)
-              .filter((name) => name !== thisName)
-              .sort((a, b) => a.localeCompare(b));
+                .map((t) => t.person)
+                .filter((tagPerson): tagPerson is PersonLike => !!tagPerson)
+                .filter((tagPerson) => tagPerson.id !== person?.id)
+                .sort(comparePeopleByLastFirst)
+                .filter((tagPerson) => !!displayName(tagPerson));
+              const nameDensityClass =
+                others.length > 6
+                  ? "mobile-photo-card-names--crowded"
+                  : others.length > 3
+                  ? "mobile-photo-card-names--dense"
+                  : "";
             return (
               <div
                 key={p.id}
+                className="mobile-list-card mobile-photo-card"
                 style={{
                   border: "2px solid #cfe4ff",
                   borderRadius: 12,
@@ -628,6 +883,7 @@ export default function PersonPhotosPage() {
                 }}
               >
                 <div
+                  className="mobile-photo-card-frame"
                   style={{
                     width: "100%",
                     aspectRatio: "1 / 1",
@@ -654,6 +910,7 @@ export default function PersonPhotosPage() {
                   />
                 </div>
                 <div
+                  className="mobile-photo-card-meta"
                   style={{
                     marginTop: 6,
                     fontSize: 18,
@@ -665,18 +922,30 @@ export default function PersonPhotosPage() {
                     justifyContent: "space-between",
                   }}
                 >
-                  <div style={{ textAlign: "center", minHeight: 26 }}>
-                    {p.description ? <i>{p.description}</i> : null}
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    {p.location || createdYear ? (
-                      <div>
-                        {p.location ? p.location : ""}
-                        {p.location && createdYear ? ", " : ""}
-                        {createdYear || ""}
+                  <div className="mobile-photo-card-details" style={{ textAlign: "right" }}>
+                    {cardHeadline ? (
+                      <div className="mobile-photo-card-date">
+                        {cardHeadline}
                       </div>
                     ) : null}
-                    {others.length > 0 ? <div>With {others.join(", ")}</div> : null}
+                    {p.location ? <div className="mobile-photo-card-location">{p.location}</div> : null}
+                    {others.length > 0 ? (
+                      <div className={["mobile-photo-card-names", nameDensityClass].filter(Boolean).join(" ")}>
+                        <span className="mobile-photo-card-names__prefix">With</span>
+                        {others.map((tagPerson) => {
+                          const name = displayName(tagPerson);
+                          return (
+                            <a
+                              className={photoNameTokenClass(name)}
+                              href={personGalleryHref(tagPerson.id, p.id)}
+                              key={tagPerson.id}
+                            >
+                              {name}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 {isEditing ? (
@@ -696,6 +965,263 @@ export default function PersonPhotosPage() {
         </div>
         </>
       )}
+
+      {profileEditOpen && isEditing && person ? (
+        <div
+          className="person-edit-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(248,250,252,0.55)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 60,
+            padding: 24,
+          }}
+        >
+          <div
+            className="person-edit-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: 16,
+              maxWidth: 720,
+              width: "90vw",
+              maxHeight: "90vh",
+              overflow: "auto",
+              border: "2px solid #cfe4ff",
+            }}
+          >
+            {(() => {
+              const selectedProfile = profilePhotoIdDraft
+                ? photos.find((ph) => ph.id === profilePhotoIdDraft)
+                : null;
+              const profilePreviewSrc = selectedProfile ? photoSrc(selectedProfile, 900, 900) : "";
+              const profileRotation = selectedProfile?.rotation ?? 0;
+
+              return (
+                <div style={{ display: "grid", gap: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontWeight: 600 }}>Edit Profile</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileEditOpen(false);
+                        profileTouchRef.current = null;
+                        profileCropDragRef.current.pointerId = null;
+                      }}
+                      className="person-profile-cancel-button"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <div
+                      className="person-profile-crop-box"
+                      style={{
+                        width: "min(260px, 72vw)",
+                        aspectRatio: "1 / 1",
+                        background: "#ffffff",
+                        border: "2px solid #dbeafe",
+                        borderRadius: 10,
+                        overflow: "hidden",
+                        position: "relative",
+                        cursor: profilePreviewSrc ? "grab" : "default",
+                        touchAction: "none",
+                      }}
+                      onDragStart={(e) => e.preventDefault()}
+                      onPointerDown={(e) => {
+                        if (!profilePreviewSrc) return;
+                        if (e.pointerType === "touch") return;
+                        e.preventDefault();
+                        const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                        profileCropDragRef.current = {
+                          pointerId: e.pointerId,
+                          startX: e.clientX,
+                          startY: e.clientY,
+                          startCropX: profileXDraft,
+                          startCropY: profileYDraft,
+                          width: rect.width || 1,
+                          height: rect.height || 1,
+                        };
+                        (e.currentTarget as HTMLDivElement).setPointerCapture?.(e.pointerId);
+                      }}
+                      onPointerMove={(e) => {
+                        if (e.pointerType === "touch") return;
+                        const drag = profileCropDragRef.current;
+                        if (drag.pointerId !== e.pointerId) return;
+                        e.preventDefault();
+                        const dx = e.clientX - drag.startX;
+                        const dy = e.clientY - drag.startY;
+                        const nx = drag.startCropX + (dx / drag.width) * 100;
+                        const ny = drag.startCropY + (dy / drag.height) * 100;
+                        setProfileXDraft(nx);
+                        setProfileYDraft(ny);
+                      }}
+                      onPointerUp={(e) => {
+                        if (profileCropDragRef.current.pointerId === e.pointerId) {
+                          (e.currentTarget as HTMLDivElement).releasePointerCapture?.(e.pointerId);
+                          profileCropDragRef.current.pointerId = null;
+                        }
+                      }}
+                      onPointerCancel={(e) => {
+                        if (profileCropDragRef.current.pointerId === e.pointerId) {
+                          (e.currentTarget as HTMLDivElement).releasePointerCapture?.(e.pointerId);
+                          profileCropDragRef.current.pointerId = null;
+                        }
+                      }}
+                      onTouchStart={(e) => {
+                        if (!profilePreviewSrc) return;
+                        startProfileTouch(e);
+                      }}
+                      onTouchMove={(e) => {
+                        if (!profilePreviewSrc) return;
+                        moveProfileTouch(e);
+                      }}
+                      onTouchEnd={endProfileTouch}
+                      onTouchCancel={() => {
+                        profileTouchRef.current = null;
+                      }}
+                    >
+                      {profilePreviewSrc ? (
+                        <img
+                          src={profilePreviewSrc}
+                          alt={displayName(person)}
+                          draggable={false}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            display: "block",
+                            transformOrigin: "center",
+                            transform: `translate(${profileXDraft}%, ${profileYDraft}%) scale(${profileZoomDraft}) rotate(${profileRotation}deg)`,
+                          }}
+                        />
+                      ) : (
+                        <div style={{ padding: 12, color: "#999", fontSize: 13 }}>Choose a profile photo below.</div>
+                      )}
+                    </div>
+                  </div>
+                  {profilePreviewSrc ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <label style={{ fontSize: 12, color: "#555" }}>
+                        Zoom
+                        <input
+                          className="profile-zoom-range"
+                          type="range"
+                          min={PROFILE_CROP_MIN_ZOOM}
+                          max={PROFILE_CROP_MAX_ZOOM}
+                          step="0.05"
+                          value={clampProfileZoom(profileZoomDraft)}
+                          onChange={(e) => setProfileZoomDraft(clampProfileZoom(Number(e.target.value)))}
+                          style={
+                            {
+                              "--profile-zoom-progress": profileZoomProgress(profileZoomDraft),
+                            } as React.CSSProperties
+                          }
+                        />
+                      </label>
+                      <div style={{ fontSize: 12, color: "#555" }}>
+                        Pinch to zoom and drag the photo to reposition.
+                      </div>
+                    </div>
+                  ) : null}
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <input
+                      value={profileFirst}
+                      onChange={(e) => setProfileFirst(e.target.value)}
+                      placeholder="First name"
+                      style={{ fontSize: 14, fontWeight: 600, padding: "6px 8px" }}
+                    />
+                    <input
+                      value={profileLast}
+                      onChange={(e) => setProfileLast(e.target.value)}
+                      placeholder="Last name"
+                      style={{ fontSize: 14, fontWeight: 600, padding: "6px 8px" }}
+                    />
+                    <input
+                      value={profileBirth}
+                      onChange={(e) => setProfileBirth(e.target.value)}
+                      placeholder="Birth year"
+                      inputMode="numeric"
+                      style={{ fontSize: 12, padding: "6px 8px" }}
+                    />
+                  </div>
+                  {profileError ? (
+                    <div style={{ fontSize: 11, color: "#991b1b" }}>{profileError}</div>
+                  ) : null}
+                  <details
+                    open={profilePhotoPickerOpen}
+                    onToggle={(e) => setProfilePhotoPickerOpen((e.currentTarget as HTMLDetailsElement).open)}
+                    className="profile-photo-picker"
+                  >
+                    <summary>Choose new profile picture</summary>
+                    <div className="profile-photo-picker__body">
+                      {photos.length > 0 ? (
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))",
+                            gap: 8,
+                          }}
+                        >
+                          {photos.map((ph) => {
+                            const src = photoSrc(ph, 200, 200);
+                            const isProfile = profilePhotoIdDraft === ph.id;
+                            return (
+                              <button
+                                key={ph.id}
+                                type="button"
+                                onClick={() => {
+                                  setProfilePhotoIdDraft(ph.id);
+                                  setProfileZoomDraft(1);
+                                  setProfileXDraft(0);
+                                  setProfileYDraft(0);
+                                }}
+                                style={{
+                                  padding: 0,
+                                  aspectRatio: "1 / 1",
+                                  border: isProfile ? "2px solid #111827" : "2px solid #cfe4ff",
+                                  borderRadius: 8,
+                                  overflow: "hidden",
+                                  background: "#fff",
+                                }}
+                                title={isProfile ? "Current profile" : "Set as profile"}
+                              >
+                                <img
+                                  src={src}
+                                  alt={ph.id}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#666" }}>No tagged photos are available for profile selection.</div>
+                      )}
+                    </div>
+                  </details>
+                  <div className="photo-edit-save-row person-profile-save-row">
+                    <button
+                      type="button"
+                      onClick={saveProfileEdits}
+                      disabled={profileSaving}
+                      className="photo-edit-save-button person-profile-save-button"
+                    >
+                      {profileSaving ? "Saving..." : "Save profile"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      ) : null}
 
       {editPhotoId && isEditing ? (
         <div
@@ -724,6 +1250,7 @@ export default function PersonPhotosPage() {
               overflow: "auto",
               border: "2px solid #cfe4ff",
             }}
+            className="photo-edit-modal"
           >
             {(() => {
               const p = photos.find((x) => x.id === editPhotoId);
@@ -731,33 +1258,23 @@ export default function PersonPhotosPage() {
               const created = p.createdTime ? new Date(p.createdTime).toISOString().slice(0, 10) : "";
               const createdYear = created ? created.slice(0, 4) : "";
               const tagNames = (p.tags || [])
-                .map((t) => displayName(t.person as any))
+                .map((t) => t.person)
+                .filter((tagPerson): tagPerson is PersonLike => !!tagPerson)
+                .sort(comparePeopleByLastFirst)
+                .map(displayName)
                 .filter(Boolean)
-                .sort((a, b) => a.localeCompare(b))
-                .join(", ");
+                ;
               const tagIds = new Set((p.tags || []).map((t) => t.person?.id).filter(Boolean));
               const imgSrc = p.storageUrl
                 ? p.storageUrl
                 : p.localPath
                 ? p.localPath
                 : proxyImgUrl(p.baseUrl, p.id, 1200, 1200);
-
               return (
                 <div style={{ display: "grid", gap: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontWeight: 600 }}>Edit Photo</div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        onClick={async () => {
-                          if (dateDrafts[p.id] !== undefined) await saveDate(p.id, created);
-                          if (locationDrafts[p.id] !== undefined) await saveLocation(p.id);
-                          if (descriptionDrafts[p.id] !== undefined) await saveDescription(p.id);
-                          setEditPhotoId(null);
-                        }}
-                        style={{ fontSize: 10, padding: "3px 6px" }}
-                      >
-                        Save
-                      </button>
                       <button
                         onClick={() => {
                           cancelEdits(p.id);
@@ -770,7 +1287,7 @@ export default function PersonPhotosPage() {
                     </div>
                   </div>
                   <div
-                    id={`crop-area-${p.id}`}
+                    className="photo-edit-image"
                     style={{
                       width: "100%",
                       height: "60vh",
@@ -778,7 +1295,6 @@ export default function PersonPhotosPage() {
                       overflow: "hidden",
                       background: "#f8fafc",
                       border: "2px solid #e2e8f0",
-                      position: "relative",
                       cursor: "default",
                     }}
                   >
@@ -796,7 +1312,7 @@ export default function PersonPhotosPage() {
                       }}
                     />
                   </div>
-                  <div style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
+                  <div className="photo-edit-meta" style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
                     {p.description ? (
                       <div>
                         <i>{p.description}</i>
@@ -809,9 +1325,18 @@ export default function PersonPhotosPage() {
                         {createdYear || ""}
                       </div>
                     ) : null}
-                    {tagNames ? <div>{tagNames}</div> : null}
+                    {tagNames.length > 0 ? (
+                      <div className="mobile-photo-card-names">
+                        {tagNames.map((name, index) => (
+                          <span className="mobile-photo-name-token" key={name}>
+                            {name}
+                            {index < tagNames.length - 1 ? "," : null}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
-                  <div style={{ display: "grid", gap: 8 }}>
+                  <div className="photo-edit-actions-grid" style={{ display: "grid", gap: 8 }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
                       <button
                         onClick={() => {
@@ -843,12 +1368,6 @@ export default function PersonPhotosPage() {
                         style={{ fontSize: 10, padding: "3px 6px", minWidth: 78 }}
                       >
                         Rotate 90°
-                      </button>
-                      <button
-                        onClick={() => deletePhoto(p.id)}
-                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 86, color: "#b91c1c" }}
-                      >
-                        Delete Image
                       </button>
                       <button
                         onClick={() => {
@@ -1046,6 +1565,23 @@ export default function PersonPhotosPage() {
                       ) : null}
                     </div>
                   ) : null}
+                  <div className="photo-edit-save-row photo-edit-save-row--split">
+                    <button
+                      onClick={() => deletePhoto(p.id)}
+                      className="photo-edit-danger photo-edit-delete-footer"
+                    >
+                      Delete Image
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await saveAllEdits(p.id, created);
+                        setEditPhotoId(null);
+                      }}
+                      className="photo-edit-save-button"
+                    >
+                      Save
+                    </button>
+                  </div>
                 </div>
               );
             })()}
@@ -1064,72 +1600,25 @@ export default function PersonPhotosPage() {
             : proxyImgUrl(p.baseUrl, p.id, 2000, 2000);
 
         return viewerOpen && filtered[viewerIndex] ? (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(248,250,252,0.55)",
-              backdropFilter: "blur(8px)",
-              WebkitBackdropFilter: "blur(8px)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 50,
-              padding: 12,
-            }}
-          >
-            <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "94vw", maxWidth: 1400, height: "88vh" }}>
-              <div
-                style={{
-                  width: "100%",
-                  height: "88vh",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  background: "transparent",
-                  border: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <img
-                  src={viewerSrc(filtered[viewerIndex])}
-                  alt={filtered[viewerIndex].id}
-                  draggable={false}
-                  onDragStart={(e) => e.preventDefault()}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "contain",
-                    display: "block",
-                    ...imageTransform(filtered[viewerIndex]),
-                  }}
-                />
-              </div>
-              <button
-                onClick={() => setViewerOpen(false)}
-                style={{ position: "absolute", top: -8, right: -8, fontSize: 12 }}
-              >
-                Close
-              </button>
-              <button
-                onClick={() =>
-                  setViewerIndex((i) => (i > 0 ? i - 1 : filtered.length - 1))
-                }
-                style={{ position: "absolute", left: -8, top: "50%", transform: "translate(-100%,-50%)", fontSize: 12 }}
-              >
-                ← Prev
-              </button>
-              <button
-                onClick={() =>
-                  setViewerIndex((i) => (i < filtered.length - 1 ? i + 1 : 0))
-                }
-                style={{ position: "absolute", right: -8, top: "50%", transform: "translate(100%,-50%)", fontSize: 12 }}
-              >
-                Next →
-              </button>
-            </div>
-          </div>
+          <PhotoLightbox
+            src={viewerSrc(filtered[viewerIndex])}
+            alt={filtered[viewerIndex].id}
+            rotation={filtered[viewerIndex].rotation}
+            caption={filtered[viewerIndex].description}
+            year={
+              filtered[viewerIndex].createdTime
+                ? new Date(filtered[viewerIndex].createdTime as string).toISOString().slice(0, 4)
+                : null
+            }
+            people={(filtered[viewerIndex].tags || []).map((tag) => ({
+              id: tag.person.id,
+              name: displayName(tag.person),
+            }))}
+            getPersonHref={(nextPersonId) => personGalleryHref(nextPersonId, filtered[viewerIndex].id)}
+            onClose={() => setViewerOpen(false)}
+            onPrev={() => setViewerIndex((i) => (i > 0 ? i - 1 : filtered.length - 1))}
+            onNext={() => setViewerIndex((i) => (i < filtered.length - 1 ? i + 1 : 0))}
+          />
         ) : null;
       })()}
     </main>

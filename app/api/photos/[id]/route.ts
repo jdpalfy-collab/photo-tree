@@ -161,6 +161,7 @@ export async function PATCH(req: NextRequest) {
         id: true,
         baseUrl: true,
         localPath: true,
+        storageUrl: true,
         mimeType: true,
         createdTime: true,
         location: true,

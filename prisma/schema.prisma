@@ -87,3 +87,15 @@ model EditLock {
   expiresAt   DateTime?
   updatedAt   DateTime @updatedAt
 }
+
+model MobileAuthHandoff {
+  id           String    @id @default(uuid())
+  tokenHash    String    @unique
+  sessionToken String    @db.Text
+  targetPath   String
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  usedAt       DateTime?
+
+  @@index([expiresAt])
+}

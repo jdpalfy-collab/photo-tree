@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useEditingMode } from "../providers";
+import MobileScrollTracker from "../ui/mobile-scroll-tracker";
+import MobileGalleryHeaderStatus from "../ui/mobile-gallery-header-status";
 
 type Person = {
   id: string;
@@ -33,6 +34,9 @@ function proxyImgUrl(baseUrl: string, photoId: string, w = 200, h = 200) {
   )}&w=${w}&h=${h}&cb=${Date.now()}`;
 }
 
+const PROFILE_CROP_MIN_ZOOM = 0.6;
+const PROFILE_CROP_MAX_ZOOM = 8;
+
 export default function PeoplePage() {
   const { mode } = useEditingMode();
   const isEditing = mode === "editing";
@@ -59,15 +63,153 @@ export default function PeoplePage() {
   const [cropY, setCropY] = useState<Record<string, number>>({});
   const [cropSaving, setCropSaving] = useState<Record<string, boolean>>({});
   const [cropError, setCropError] = useState<Record<string, string>>({});
+  const [peopleSortMode, setPeopleSortMode] = useState<"name" | "birthRecent" | "birthOldest">("name");
+  const [selectedLastNames, setSelectedLastNames] = useState<Record<string, boolean>>({});
   const cropDragRef = useRef<{
     personId: string | null;
+    pointerId: number | null;
     startX: number;
     startY: number;
     startCropX: number;
     startCropY: number;
     width: number;
     height: number;
-  }>({ personId: null, startX: 0, startY: 0, startCropX: 0, startCropY: 0, width: 1, height: 1 });
+  }>({ personId: null, pointerId: null, startX: 0, startY: 0, startCropX: 0, startCropY: 0, width: 1, height: 1 });
+  const cropTouchRef = useRef<
+    | {
+        mode: "drag";
+        personId: string;
+        startX: number;
+        startY: number;
+        startCropX: number;
+        startCropY: number;
+        width: number;
+        height: number;
+      }
+    | {
+        mode: "pinch";
+        personId: string;
+        startDistance: number;
+        startZoom: number;
+      }
+    | null
+  >(null);
+
+  function clampCropZoom(value: number) {
+    return Math.max(PROFILE_CROP_MIN_ZOOM, Math.min(PROFILE_CROP_MAX_ZOOM, Math.round(value * 100) / 100));
+  }
+
+  function cropZoomProgress(value: number) {
+    const zoom = clampCropZoom(value);
+    return `${((zoom - PROFILE_CROP_MIN_ZOOM) / (PROFILE_CROP_MAX_ZOOM - PROFILE_CROP_MIN_ZOOM)) * 100}%`;
+  }
+
+  function cropTouchDistance(touches: { [index: number]: { clientX: number; clientY: number } }) {
+    const first = touches[0];
+    const second = touches[1];
+    return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+  }
+
+  function resetPersonEdit(p: Person) {
+    setEditingPersonId(null);
+    setCropZoom((m) => ({ ...m, [p.id]: p.profileZoom ?? 1 }));
+    setCropX((m) => ({ ...m, [p.id]: p.profileX ?? 0 }));
+    setCropY((m) => ({ ...m, [p.id]: p.profileY ?? 0 }));
+    setEditFirst((m) => ({ ...m, [p.id]: p.firstName ?? "" }));
+    setEditLast((m) => ({ ...m, [p.id]: p.lastName ?? "" }));
+    setEditBirth((m) => ({ ...m, [p.id]: p.birthYear ? String(p.birthYear) : "" }));
+    cropDragRef.current.personId = null;
+    cropDragRef.current.pointerId = null;
+    cropTouchRef.current = null;
+  }
+
+  function startCropTouch(p: Person, e: React.TouchEvent<HTMLDivElement>) {
+    const target = e.currentTarget;
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      cropDragRef.current.personId = null;
+      cropDragRef.current.pointerId = null;
+      cropTouchRef.current = {
+        mode: "pinch",
+        personId: p.id,
+        startDistance: cropTouchDistance(e.touches),
+        startZoom: cropZoom[p.id] ?? p.profileZoom ?? 1,
+      };
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      const rect = target.getBoundingClientRect();
+      const touch = e.touches[0];
+      cropTouchRef.current = {
+        mode: "drag",
+        personId: p.id,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startCropX: cropX[p.id] ?? p.profileX ?? 0,
+        startCropY: cropY[p.id] ?? p.profileY ?? 0,
+        width: rect.width || 1,
+        height: rect.height || 1,
+      };
+    }
+  }
+
+  function moveCropTouch(p: Person, e: React.TouchEvent<HTMLDivElement>) {
+    const state = cropTouchRef.current;
+    if (!state || state.personId !== p.id) return;
+
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const distance = cropTouchDistance(e.touches);
+      const startDistance = state.mode === "pinch" ? state.startDistance : distance;
+      const startZoom = state.mode === "pinch" ? state.startZoom : cropZoom[p.id] ?? p.profileZoom ?? 1;
+      if (startDistance <= 0) return;
+      setCropZoom((m) => ({
+        ...m,
+        [p.id]: clampCropZoom(startZoom * (distance / startDistance)),
+      }));
+      if (state.mode !== "pinch") {
+        cropTouchRef.current = {
+          mode: "pinch",
+          personId: p.id,
+          startDistance: distance,
+          startZoom,
+        };
+      }
+      return;
+    }
+
+    if (state.mode === "drag" && e.touches.length === 1) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const dx = touch.clientX - state.startX;
+      const dy = touch.clientY - state.startY;
+      const nx = state.startCropX + (dx / state.width) * 100;
+      const ny = state.startCropY + (dy / state.height) * 100;
+      setCropX((m) => ({ ...m, [p.id]: nx }));
+      setCropY((m) => ({ ...m, [p.id]: ny }));
+    }
+  }
+
+  function endCropTouch(p: Person, e: React.TouchEvent<HTMLDivElement>) {
+    if (e.touches.length === 1) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const touch = e.touches[0];
+      cropTouchRef.current = {
+        mode: "drag",
+        personId: p.id,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startCropX: cropX[p.id] ?? p.profileX ?? 0,
+        startCropY: cropY[p.id] ?? p.profileY ?? 0,
+        width: rect.width || 1,
+        height: rect.height || 1,
+      };
+      return;
+    }
+    cropTouchRef.current = null;
+  }
 
   async function load() {
     setErr("");
@@ -151,7 +293,7 @@ export default function PeoplePage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          profileZoom: cropZoom[personId] ?? 1,
+          profileZoom: clampCropZoom(cropZoom[personId] ?? 1),
           profileX: cropX[personId] ?? 0,
           profileY: cropY[personId] ?? 0,
         }),
@@ -294,11 +436,83 @@ export default function PeoplePage() {
     load();
   }, []);
 
+  const lastNameFilters = Array.from(
+    new Set(people.map((p) => (p.lastName || "").trim() || "No last name"))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const displayedPeople = [...people]
+    .filter((p) => {
+      const required = Object.keys(selectedLastNames).filter((key) => selectedLastNames[key]);
+      if (required.length === 0) return true;
+      const lastName = (p.lastName || "").trim() || "No last name";
+      return required.includes(lastName);
+    })
+    .sort((a, b) => {
+      const fallback = () => {
+        const al = (a.lastName || "").toLowerCase();
+        const bl = (b.lastName || "").toLowerCase();
+        if (al !== bl) return al.localeCompare(bl);
+        const af = (a.firstName || "").toLowerCase();
+        const bf = (b.firstName || "").toLowerCase();
+        if (af !== bf) return af.localeCompare(bf);
+        return (a.name || "").localeCompare(b.name || "");
+      };
+
+      if (peopleSortMode === "birthRecent") {
+        const ay = a.birthYear ?? -Infinity;
+        const by = b.birthYear ?? -Infinity;
+        return by - ay || fallback();
+      }
+
+      if (peopleSortMode === "birthOldest") {
+        const ay = a.birthYear ?? Infinity;
+        const by = b.birthYear ?? Infinity;
+        return ay - by || fallback();
+      }
+
+      return fallback();
+    });
+  const selectedLastNameCount = Object.values(selectedLastNames).filter(Boolean).length;
+  const peopleFilterStatus =
+    selectedLastNameCount === 0
+      ? "All"
+      : selectedLastNameCount === 1
+      ? Object.keys(selectedLastNames).find((key) => selectedLastNames[key]) || "1 selected"
+      : `${selectedLastNameCount} selected`;
+  const peopleSortStatus =
+    peopleSortMode === "birthOldest"
+      ? "Birth year"
+      : peopleSortMode === "birthRecent"
+      ? "Recent birth"
+      : "Last name";
+
   return (
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1 style={{ marginTop: 0 }}>People</h1>
+      <MobileScrollTracker />
+      <MobileGalleryHeaderStatus
+        filterValue={peopleFilterStatus}
+        filterOptions={lastNameFilters.map((lastName) => ({
+          id: lastName,
+          label: lastName,
+          checked: !!selectedLastNames[lastName],
+        }))}
+        onFilterChange={(lastName, checked) =>
+          setSelectedLastNames((current) => ({ ...current, [lastName]: checked }))
+        }
+        sortValue={peopleSortStatus}
+        sortMode={peopleSortMode}
+        sortOptions={[
+          { value: "name", label: "Last name (A to Z)" },
+          { value: "birthOldest", label: "Chronological birth year" },
+          { value: "birthRecent", label: "Most recent birth year" },
+        ]}
+        onSortChange={(value) =>
+          setPeopleSortMode(value as "name" | "birthRecent" | "birthOldest")
+        }
+      />
+      <h1 className="mobile-route-title" style={{ marginTop: 0 }}>People</h1>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }} />
+      <div className="mobile-route-spacer" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }} />
 
       {err ? (
         <pre style={{ background: "#fee2e2", padding: 12, borderRadius: 10, color: "#991b1b" }}>
@@ -306,7 +520,10 @@ export default function PeoplePage() {
         </pre>
       ) : null}
 
-      <div style={{ display: "grid", gap: 10, marginBottom: 16, maxWidth: 900, minHeight: 40 }}>
+      <div
+        className={!isEditing ? "mobile-route-spacer" : undefined}
+        style={{ display: "grid", gap: 10, marginBottom: 16, maxWidth: 900, minHeight: 40 }}
+      >
         {isEditing ? (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button
@@ -368,10 +585,52 @@ export default function PeoplePage() {
 
       <div style={{ marginBottom: 10, color: "#555" }} />
 
+      {people.length > 0 ? (
+        <>
+          <div className="mobile-control-row">
+            <details className="mobile-filter-dropdown">
+              <summary>
+                Filter
+              </summary>
+              <div className="mobile-filter-options" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                {lastNameFilters.map((lastName) => (
+                  <label key={lastName} style={{ fontSize: 16, color: "#444" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!selectedLastNames[lastName]}
+                      onChange={(e) =>
+                        setSelectedLastNames((m) => ({ ...m, [lastName]: e.target.checked }))
+                      }
+                      style={{ marginRight: 8 }}
+                    />
+                    {lastName}
+                  </label>
+                ))}
+              </div>
+            </details>
+            <div className="mobile-sort-control">
+              <label style={{ fontSize: 16, color: "#444" }} htmlFor="peopleSortMode">Sort</label>
+              <select
+                id="peopleSortMode"
+                value={peopleSortMode}
+                onChange={(e) => setPeopleSortMode(e.target.value as "name" | "birthRecent" | "birthOldest")}
+                className="mobile-sort-select"
+                style={{ fontSize: 14, padding: "6px 10px" }}
+              >
+                <option value="name">Last name (A → Z)</option>
+                <option value="birthOldest">Chronological birth year</option>
+                <option value="birthRecent">Most recent birth year</option>
+              </select>
+            </div>
+          </div>
+        </>
+      ) : null}
+
       {people.length === 0 ? (
         <div style={{ color: "#666" }}>No people added yet.</div>
       ) : (
         <div
+          className="mobile-card-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -379,37 +638,29 @@ export default function PeoplePage() {
             maxWidth: 1600,
           }}
         >
-          {[...people]
-            .sort((a, b) => {
-              const al = (a.lastName || "").toLowerCase();
-              const bl = (b.lastName || "").toLowerCase();
-              if (al !== bl) return al.localeCompare(bl);
-              const af = (a.firstName || "").toLowerCase();
-              const bf = (b.firstName || "").toLowerCase();
-              if (af !== bf) return af.localeCompare(bf);
-              return (a.name || "").localeCompare(b.name || "");
-            })
-            .map((p) => (
+          {displayedPeople.map((p) => (
             <div
               key={p.id}
+              className="mobile-list-card people-list-card"
               style={{
                 border: "2px solid #cfe4ff",
                 borderRadius: 12,
                 padding: 10,
                 display: "grid",
-                gap: 10,
+                gap: 6,
                 position: "relative",
-                minHeight: 260,
+                minHeight: 220,
                 alignContent: "start",
-                paddingBottom: 36,
+                paddingBottom: 14,
               }}
             >
-              <Link
+              <a
                 href={`/family-tree/${p.id}?from=people`}
                 style={{ display: "block", textDecoration: "none", color: "inherit" }}
                 aria-label={`Open ${p.name} gallery`}
               >
                 <div
+                  className="people-card-profile"
                   style={{
                     width: "100%",
                     aspectRatio: "1 / 1",
@@ -437,16 +688,13 @@ export default function PeoplePage() {
                     <div style={{ padding: 12, color: "#999", fontSize: 13 }}>No profile</div>
                   )}
                 </div>
-              </Link>
+              </a>
 
-              <div style={{ minHeight: 72, textAlign: "right" }}>
+              <div className="people-card-name" style={{ minHeight: 28, textAlign: "right" }}>
                 <div style={{ fontWeight: 700, fontSize: 20 }}>
-                  <Link href={`/family-tree/${p.id}?from=people`} style={{ textDecoration: "none", color: "#6aa8ff" }}>
+                  <a href={`/family-tree/${p.id}?from=people`} style={{ textDecoration: "none", color: "#6aa8ff" }}>
                     {displayName(p)}
-                  </Link>
-                </div>
-                <div style={{ fontSize: 16, color: "#555", marginBottom: 8, fontWeight: 700 }}>
-                  Born {p.birthYear ?? "—"}
+                  </a>
                 </div>
               </div>
               {isEditing ? (
@@ -462,7 +710,7 @@ export default function PeoplePage() {
                       setCropZoom((m) => ({ ...m, [p.id]: p.profileZoom ?? 1 }));
                       setCropX((m) => ({ ...m, [p.id]: p.profileX ?? 0 }));
                       setCropY((m) => ({ ...m, [p.id]: p.profileY ?? 0 }));
-                      setPickerOpen((m) => ({ ...m, [p.id]: true }));
+                      setPickerOpen((m) => ({ ...m, [p.id]: false }));
                       if (!photosByPerson[p.id]) loadPhotos(p.id);
                     } else {
                       setPickerOpen((m) => ({ ...m, [p.id]: false }));
@@ -481,6 +729,7 @@ export default function PeoplePage() {
 
       {editingPersonId && isEditing ? (
         <div
+          className="person-edit-overlay"
           style={{
             position: "fixed",
             inset: 0,
@@ -495,6 +744,7 @@ export default function PeoplePage() {
           }}
         >
           <div
+            className="person-edit-modal"
             onClick={(e) => e.stopPropagation()}
             style={{
               background: "#fff",
@@ -517,21 +767,19 @@ export default function PeoplePage() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontWeight: 600 }}>Edit Profile</div>
                     <button
-                      onClick={async () => {
-                        await saveCrop(p.id);
-                        await saveName(p.id);
-                      }}
-                      disabled={cropSaving[p.id] || editSaving[p.id]}
-                      style={{ fontSize: 10, padding: "3px 6px" }}
+                      type="button"
+                      onClick={() => resetPersonEdit(p)}
+                      className="person-profile-cancel-button"
                     >
-                      {cropSaving[p.id] || editSaving[p.id] ? "Saving..." : "Save profile"}
+                      Cancel
                     </button>
                   </div>
                   <div style={{ display: "flex", justifyContent: "center" }}>
                     <div
+                      className="person-profile-crop-box"
                       style={{
-                        width: "320px",
-                        height: "320px",
+                        width: "min(260px, 72vw)",
+                        aspectRatio: "1 / 1",
                         background: "#ffffff",
                         border: "2px solid #dbeafe",
                         borderRadius: 10,
@@ -541,12 +789,14 @@ export default function PeoplePage() {
                         touchAction: "none",
                       }}
                       onDragStart={(e) => e.preventDefault()}
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         if (!profileSrc) return;
+                        if (e.pointerType === "touch") return;
                         e.preventDefault();
                         const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
                         cropDragRef.current = {
                           personId: p.id,
+                          pointerId: e.pointerId,
                           startX: e.clientX,
                           startY: e.clientY,
                           startCropX: cropX[p.id] ?? p.profileX ?? 0,
@@ -554,27 +804,45 @@ export default function PeoplePage() {
                           width: rect.width || 1,
                           height: rect.height || 1,
                         };
+                        (e.currentTarget as HTMLDivElement).setPointerCapture?.(e.pointerId);
                       }}
-                      onMouseMove={(e) => {
+                      onPointerMove={(e) => {
+                        if (e.pointerType === "touch") return;
                         const drag = cropDragRef.current;
-                        if (!drag.personId || drag.personId !== p.id) return;
+                        if (!drag.personId || drag.personId !== p.id || drag.pointerId !== e.pointerId) return;
                         e.preventDefault();
                         const dx = e.clientX - drag.startX;
                         const dy = e.clientY - drag.startY;
                         const nx = drag.startCropX + (dx / drag.width) * 100;
                         const ny = drag.startCropY + (dy / drag.height) * 100;
-                        setCropX((m) => ({ ...m, [p.id]: Math.max(-150, Math.min(150, nx)) }));
-                        setCropY((m) => ({ ...m, [p.id]: Math.max(-150, Math.min(150, ny)) }));
+                        setCropX((m) => ({ ...m, [p.id]: nx }));
+                        setCropY((m) => ({ ...m, [p.id]: ny }));
                       }}
-                      onMouseUp={() => {
-                        if (cropDragRef.current.personId === p.id) {
+                      onPointerUp={(e) => {
+                        if (cropDragRef.current.personId === p.id && cropDragRef.current.pointerId === e.pointerId) {
+                          (e.currentTarget as HTMLDivElement).releasePointerCapture?.(e.pointerId);
                           cropDragRef.current.personId = null;
+                          cropDragRef.current.pointerId = null;
                         }
                       }}
-                      onMouseLeave={() => {
-                        if (cropDragRef.current.personId === p.id) {
+                      onPointerCancel={(e) => {
+                        if (cropDragRef.current.personId === p.id && cropDragRef.current.pointerId === e.pointerId) {
+                          (e.currentTarget as HTMLDivElement).releasePointerCapture?.(e.pointerId);
                           cropDragRef.current.personId = null;
+                          cropDragRef.current.pointerId = null;
                         }
+                      }}
+                      onTouchStart={(e) => {
+                        if (!profileSrc) return;
+                        startCropTouch(p, e);
+                      }}
+                      onTouchMove={(e) => {
+                        if (!profileSrc) return;
+                        moveCropTouch(p, e);
+                      }}
+                      onTouchEnd={(e) => endCropTouch(p, e)}
+                      onTouchCancel={() => {
+                        cropTouchRef.current = null;
                       }}
                     >
                       {profileSrc ? (
@@ -601,35 +869,24 @@ export default function PeoplePage() {
                       <label style={{ fontSize: 12, color: "#555" }}>
                         Zoom
                         <input
+                          className="profile-zoom-range"
                           type="range"
-                          min="0.6"
-                          max="4"
+                          min={PROFILE_CROP_MIN_ZOOM}
+                          max={PROFILE_CROP_MAX_ZOOM}
                           step="0.05"
-                          value={cropZoom[p.id] ?? p.profileZoom ?? 1}
+                          value={clampCropZoom(cropZoom[p.id] ?? p.profileZoom ?? 1)}
                           onChange={(e) =>
-                            setCropZoom((m) => ({ ...m, [p.id]: Number(e.target.value) }))
+                            setCropZoom((m) => ({ ...m, [p.id]: clampCropZoom(Number(e.target.value)) }))
                           }
-                          style={{ width: "100%" }}
+                          style={
+                            {
+                              "--profile-zoom-progress": cropZoomProgress(cropZoom[p.id] ?? p.profileZoom ?? 1),
+                            } as React.CSSProperties
+                          }
                         />
                       </label>
                       <div style={{ fontSize: 12, color: "#555" }}>
-                        Drag the photo to reposition
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                        <button
-                          onClick={() => {
-                            setEditingPersonId(null);
-                            setCropZoom((m) => ({ ...m, [p.id]: p.profileZoom ?? 1 }));
-                            setCropX((m) => ({ ...m, [p.id]: p.profileX ?? 0 }));
-                            setCropY((m) => ({ ...m, [p.id]: p.profileY ?? 0 }));
-                            setEditFirst((m) => ({ ...m, [p.id]: p.firstName ?? "" }));
-                            setEditLast((m) => ({ ...m, [p.id]: p.lastName ?? "" }));
-                            setEditBirth((m) => ({ ...m, [p.id]: p.birthYear ? String(p.birthYear) : "" }));
-                          }}
-                          style={{ fontSize: 12, color: "#b91c1c" }}
-                        >
-                          Cancel
-                        </button>
+                        Pinch to zoom and drag the photo to reposition.
                       </div>
                       {cropError[p.id] ? (
                         <div style={{ fontSize: 11, color: "#991b1b" }}>{cropError[p.id]}</div>
@@ -660,50 +917,74 @@ export default function PeoplePage() {
                   {editError[p.id] ? (
                     <div style={{ fontSize: 11, color: "#991b1b" }}>{editError[p.id]}</div>
                   ) : null}
-                  <div>
-                    {loadingPhotos[p.id] ? (
-                      <div style={{ fontSize: 12, color: "#666" }}>Loading photos…</div>
-                    ) : (photosByPerson[p.id] || []).length === 0 ? (
-                      <div style={{ fontSize: 12, color: "#666" }}>No tagged photos.</div>
-                    ) : (
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
-                          gap: 8,
-                        }}
-                      >
-                        {(photosByPerson[p.id] || []).map((ph) => {
-                          const src = ph.storageUrl
-                            ? ph.storageUrl
-                            : ph.localPath
-                            ? ph.localPath
-                            : proxyImgUrl(ph.baseUrl, ph.id);
-                          const isProfile = p.profilePhotoId === ph.id;
-                          return (
-                            <button
-                              key={ph.id}
-                              onClick={() => setProfilePhoto(p.id, ph.id)}
-                              disabled={!!savingProfile[p.id]}
-                              style={{
-                                padding: 0,
-                                border: isProfile ? "2px solid #111827" : "2px solid #cfe4ff",
-                                borderRadius: 8,
-                                overflow: "hidden",
-                                background: "#fff",
-                              }}
-                              title={isProfile ? "Current profile" : "Set as profile"}
-                            >
-                              <img
-                                src={src}
-                                alt={ph.id}
-                                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                              />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                  <details
+                    open={!!pickerOpen[p.id]}
+                    onToggle={(e) => {
+                      const open = (e.currentTarget as HTMLDetailsElement).open;
+                      setPickerOpen((m) => ({ ...m, [p.id]: open }));
+                      if (open && !photosByPerson[p.id]) loadPhotos(p.id);
+                    }}
+                    className="profile-photo-picker"
+                  >
+                    <summary>Choose new profile picture</summary>
+                    <div className="profile-photo-picker__body">
+                      {loadingPhotos[p.id] ? (
+                        <div style={{ fontSize: 12, color: "#666" }}>Loading photos...</div>
+                      ) : (photosByPerson[p.id] || []).length === 0 ? (
+                        <div style={{ fontSize: 12, color: "#666" }}>No tagged photos.</div>
+                      ) : (
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+                            gap: 8,
+                          }}
+                        >
+                          {(photosByPerson[p.id] || []).map((ph) => {
+                            const src = ph.storageUrl
+                              ? ph.storageUrl
+                              : ph.localPath
+                              ? ph.localPath
+                              : proxyImgUrl(ph.baseUrl, ph.id);
+                            const isProfile = p.profilePhotoId === ph.id;
+                            return (
+                              <button
+                                key={ph.id}
+                                onClick={() => setProfilePhoto(p.id, ph.id)}
+                                disabled={!!savingProfile[p.id]}
+                                style={{
+                                  padding: 0,
+                                  border: isProfile ? "2px solid #111827" : "2px solid #cfe4ff",
+                                  borderRadius: 8,
+                                  overflow: "hidden",
+                                  background: "#fff",
+                                }}
+                                title={isProfile ? "Current profile" : "Set as profile"}
+                              >
+                                <img
+                                  src={src}
+                                  alt={ph.id}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                  <div className="photo-edit-save-row person-profile-save-row">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await saveCrop(p.id);
+                        await saveName(p.id);
+                      }}
+                      disabled={cropSaving[p.id] || editSaving[p.id]}
+                      className="photo-edit-save-button person-profile-save-button"
+                    >
+                      {cropSaving[p.id] || editSaving[p.id] ? "Saving..." : "Save profile"}
+                    </button>
                   </div>
                 </div>
               );

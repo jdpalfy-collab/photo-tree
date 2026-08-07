@@ -2,9 +2,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEditingMode } from "../providers";
 import React from "react";
+import PhotoLightbox from "../ui/photo-lightbox";
+import MobileScrollTracker from "../ui/mobile-scroll-tracker";
+import MobileGalleryHeaderStatus from "../ui/mobile-gallery-header-status";
 
 type Photo = {
   id: string;
@@ -51,6 +54,23 @@ function displayName(p: Person) {
   return full || p.name;
 }
 
+function comparePeopleByLastFirst(a: Person, b: Person) {
+  const al = (a.lastName || "").toLowerCase();
+  const bl = (b.lastName || "").toLowerCase();
+  if (al !== bl) return al.localeCompare(bl);
+  const af = (a.firstName || "").toLowerCase();
+  const bf = (b.firstName || "").toLowerCase();
+  if (af !== bf) return af.localeCompare(bf);
+  return displayName(a).localeCompare(displayName(b));
+}
+
+function photoNameTokenClass(name: string) {
+  const compactLength = name.replace(/\s+/g, "").length;
+  if (compactLength >= 18) return "mobile-photo-name-token mobile-photo-name-token--extra-long";
+  if (compactLength >= 13) return "mobile-photo-name-token mobile-photo-name-token--long";
+  return "mobile-photo-name-token";
+}
+
 function imageTransform(p: Photo) {
   const rotate = p.rotation ?? 0;
   return rotate
@@ -61,6 +81,8 @@ function imageTransform(p: Photo) {
 export default function SavedPage() {
   const { mode } = useEditingMode();
   const isEditing = mode === "editing";
+  const searchParams = useSearchParams();
+  const focusPhotoId = searchParams?.get("photoId") || "";
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [err, setErr] = useState<string>("");
   const [cacheBusy, setCacheBusy] = useState(false);
@@ -85,67 +107,13 @@ export default function SavedPage() {
   const [descriptionError, setDescriptionError] = useState<Record<string, string>>({});
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [focusedPhotoId, setFocusedPhotoId] = useState("");
   const [newPersonDraft, setNewPersonDraft] = useState<{ firstName: string; lastName: string; birthYear: string }>({
     firstName: "",
     lastName: "",
     birthYear: "",
   });
-  const [cropMode, setCropMode] = useState<Record<string, boolean>>({});
-  const [cropDrafts, setCropDrafts] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
-  const cropDragRef = React.useRef<{
-    photoId: string | null;
-    mode: "move" | "nw" | "ne" | "sw" | "se" | null;
-    startX: number;
-    startY: number;
-    rect: DOMRect | null;
-    start: { x: number; y: number; w: number; h: number };
-  }>({ photoId: null, mode: null, startX: 0, startY: 0, rect: null, start: { x: 0, y: 0, w: 1, h: 1 } });
-
-  useEffect(() => {
-    function onMove(e: MouseEvent) {
-      const drag = cropDragRef.current;
-      if (!drag.photoId || !drag.rect || !drag.mode) return;
-      const rect = drag.rect;
-      const dx = (e.clientX - drag.startX) / rect.width;
-      const dy = (e.clientY - drag.startY) / rect.height;
-      const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-      let { x, y, w, h } = drag.start;
-      if (drag.mode === "move") {
-        x = clamp(x + dx, 0, 1 - w);
-        y = clamp(y + dy, 0, 1 - h);
-      } else {
-        if (drag.mode.includes("n")) {
-          const ny = clamp(y + dy, 0, y + h - 0.05);
-          h = h + (y - ny);
-          y = ny;
-        }
-        if (drag.mode.includes("s")) {
-          h = clamp(h + dy, 0.05, 1 - y);
-        }
-        if (drag.mode.includes("w")) {
-          const nx = clamp(x + dx, 0, x + w - 0.05);
-          w = w + (x - nx);
-          x = nx;
-        }
-        if (drag.mode.includes("e")) {
-          w = clamp(w + dx, 0.05, 1 - x);
-        }
-      }
-      setCropDrafts((m) => ({ ...m, [drag.photoId as string]: { x, y, w, h } }));
-    }
-    function onUp() {
-      if (cropDragRef.current.photoId) {
-        cropDragRef.current = { photoId: null, mode: null, startX: 0, startY: 0, rect: null, start: { x: 0, y: 0, w: 1, h: 1 } };
-      }
-    }
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, []);
-
+  const cacheRepairAttemptedRef = React.useRef(false);
   async function load() {
     setErr("");
     const r = await fetch("/api/photos/saved", { cache: "no-store" });
@@ -422,6 +390,16 @@ export default function SavedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos.length]);
 
+  useEffect(() => {
+    if (cacheRepairAttemptedRef.current) return;
+    if (photos.length === 0) return;
+    const hasMissingDurableImage = photos.some((p) => !p.storageUrl && p.baseUrl);
+    if (!hasMissingDurableImage) return;
+    cacheRepairAttemptedRef.current = true;
+    void cacheMissing();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photos.length]);
+
   const displayPhotos = [...photos]
     .sort((a, b) => {
       const ta = a.createdTime ? new Date(a.createdTime).getTime() : Infinity;
@@ -441,6 +419,41 @@ export default function SavedPage() {
       const present = new Set(tags.map((t) => t.personId));
       return required.every((id) => present.has(id));
     });
+  const photoFilterIds = new Set(
+    Object.values(tagsByPhoto).flatMap((tags) => (tags || []).map((tag) => tag.personId))
+  );
+  const photoFilterPeople = people
+    .filter((person) => photoFilterIds.has(person.id))
+    .sort(comparePeopleByLastFirst);
+  const selectedPeople = photoFilterPeople.filter((person) => selectedWith[person.id]);
+  const photoFilterStatus =
+    selectedPeople.length === 0
+      ? "All"
+      : selectedPeople.length === 1
+      ? displayName(selectedPeople[0])
+      : `${selectedPeople.length} people`;
+  const photoSortStatus = sortMode === "recent" ? "Most recent" : "Chronological";
+  const focusPhotoVisible = focusPhotoId ? displayPhotos.some((photo) => photo.id === focusPhotoId) : false;
+
+  useEffect(() => {
+    if (!focusPhotoId || !focusPhotoVisible) return;
+    const timer = window.setTimeout(() => {
+      const card = document.getElementById(`photo-card-${focusPhotoId}`);
+      if (!card) return;
+      setFocusedPhotoId(focusPhotoId);
+      const scroller = document.querySelector<HTMLElement>(".site-content");
+      if (scroller) {
+        scroller.scrollTo({
+          top: Math.max(0, card.offsetTop - 12),
+          behavior: "smooth",
+        });
+      } else {
+        card.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      window.setTimeout(() => setFocusedPhotoId(""), 1600);
+    }, 260);
+    return () => window.clearTimeout(timer);
+  }, [focusPhotoId, focusPhotoVisible]);
 
   function viewerSrc(p: Photo) {
     return p.storageUrl
@@ -450,26 +463,35 @@ export default function SavedPage() {
       : proxyImgUrl(p.baseUrl, p.id, 2000, 2000);
   }
 
-  useEffect(() => {
-    if (!viewerOpen) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setViewerOpen(false);
-      } else if (e.key === "ArrowLeft") {
-        setViewerIndex((i) => (i > 0 ? i - 1 : i));
-      } else if (e.key === "ArrowRight") {
-        setViewerIndex((i) => (i < displayPhotos.length - 1 ? i + 1 : i));
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [viewerOpen, displayPhotos.length]);
+  function personGalleryHref(personId: string, photoId: string) {
+    const params = new URLSearchParams({ from: "photos", photoId });
+    return `/family-tree/${encodeURIComponent(personId)}?${params.toString()}`;
+  }
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1 style={{ marginTop: 0 }}>Photos</h1>
+      <MobileScrollTracker />
+      <MobileGalleryHeaderStatus
+        filterValue={photoFilterStatus}
+        filterOptions={photoFilterPeople.map((person) => ({
+          id: person.id,
+          label: displayName(person),
+          checked: !!selectedWith[person.id],
+        }))}
+        onFilterChange={(personId, checked) =>
+          setSelectedWith((current) => ({ ...current, [personId]: checked }))
+        }
+        sortValue={photoSortStatus}
+        sortMode={sortMode}
+        sortOptions={[
+          { value: "chronological", label: "Chronological" },
+          { value: "recent", label: "Most recent" },
+        ]}
+        onSortChange={(value) => setSortMode(value as "chronological" | "recent")}
+      />
+      <h1 className="mobile-route-title" style={{ marginTop: 0 }}>Photos</h1>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }} />
+      <div className="mobile-route-spacer" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }} />
 
       {err ? (
         <pre style={{ background: "#fee2e2", padding: 12, borderRadius: 10, color: "#991b1b" }}>
@@ -481,65 +503,70 @@ export default function SavedPage() {
         <div style={{ marginBottom: 10, color: "#065f46" }}>{cacheMsg}</div>
       ) : null}
 
-      <div style={{ marginBottom: 10, color: "#555" }} />
+      <div className="mobile-route-spacer" style={{ marginBottom: 10, color: "#555" }} />
 
-      <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <label style={{ fontSize: 16, color: "#444" }} htmlFor="sortModeSaved">Sort</label>
-        <select
-          id="sortModeSaved"
-          value={sortMode}
-          onChange={(e) => setSortMode(e.target.value as "chronological" | "recent")}
-          style={{ fontSize: 16, padding: "6px 10px" }}
-        >
-          <option value="chronological">Chronological (oldest → newest)</option>
-          <option value="recent">Most recent (newest → oldest)</option>
-        </select>
-      </div>
-      {(() => {
-        const coTags = new Map<
-          string,
-          { firstName: string; lastName: string; name: string }
-        >();
-        Object.values(tagsByPhoto).forEach((tags) => {
-          (tags || []).forEach((t) => {
-            const fn = t.person?.firstName || "";
-            const ln = t.person?.lastName || "";
-            const full = `${fn} ${ln}`.trim();
-            const name = full || t.person?.name || "";
-            if (t.personId && name) {
-              coTags.set(t.personId, { firstName: fn, lastName: ln, name });
-            }
+      <div className="mobile-control-row">
+        {(() => {
+          const coTags = new Map<
+            string,
+            { firstName: string; lastName: string; name: string }
+          >();
+          Object.values(tagsByPhoto).forEach((tags) => {
+            (tags || []).forEach((t) => {
+              const fn = t.person?.firstName || "";
+              const ln = t.person?.lastName || "";
+              const full = `${fn} ${ln}`.trim();
+              const name = full || t.person?.name || "";
+              if (t.personId && name) {
+                coTags.set(t.personId, { firstName: fn, lastName: ln, name });
+              }
+            });
           });
-        });
-        const entries = Array.from(coTags.entries()).sort((a, b) => {
-          const al = (a[1].lastName || "").toLowerCase();
-          const bl = (b[1].lastName || "").toLowerCase();
-          if (al !== bl) return al.localeCompare(bl);
-          const af = (a[1].firstName || "").toLowerCase();
-          const bf = (b[1].firstName || "").toLowerCase();
-          if (af !== bf) return af.localeCompare(bf);
-          return (a[1].name || "").localeCompare(b[1].name || "");
-        });
-        if (entries.length === 0) return null;
-        return (
-            <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 16, color: "#444", marginBottom: 8 }}>Filter: Only show photos with…</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-              {entries.map(([id, meta]) => (
-                <label key={id} style={{ fontSize: 16, color: "#444" }}>
-                  <input
-                    type="checkbox"
-                    checked={!!selectedWith[id]}
-                    onChange={(e) => setSelectedWith((m) => ({ ...m, [id]: e.target.checked }))}
-                    style={{ marginRight: 8 }}
-                  />
-                  {meta.name}
-                </label>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
+          const entries = Array.from(coTags.entries()).sort((a, b) => {
+            const al = (a[1].lastName || "").toLowerCase();
+            const bl = (b[1].lastName || "").toLowerCase();
+            if (al !== bl) return al.localeCompare(bl);
+            const af = (a[1].firstName || "").toLowerCase();
+            const bf = (b[1].firstName || "").toLowerCase();
+            if (af !== bf) return af.localeCompare(bf);
+            return (a[1].name || "").localeCompare(b[1].name || "");
+          });
+          if (entries.length === 0) return <span />;
+          return (
+            <details className="mobile-filter-dropdown">
+              <summary>
+                Filter
+              </summary>
+              <div className="mobile-filter-options" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                {entries.map(([id, meta]) => (
+                  <label key={id} style={{ fontSize: 16, color: "#444" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!selectedWith[id]}
+                      onChange={(e) => setSelectedWith((m) => ({ ...m, [id]: e.target.checked }))}
+                      style={{ marginRight: 8 }}
+                    />
+                    {meta.name}
+                  </label>
+                ))}
+              </div>
+            </details>
+          );
+        })()}
+        <div className="mobile-sort-control">
+          <label style={{ fontSize: 16, color: "#444" }} htmlFor="sortModeSaved">Sort</label>
+          <select
+            id="sortModeSaved"
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as "chronological" | "recent")}
+            className="mobile-sort-select"
+            style={{ fontSize: 16, padding: "6px 10px" }}
+          >
+            <option value="chronological">Chronological</option>
+            <option value="recent">Most recent</option>
+          </select>
+        </div>
+      </div>
 
       {photos.length === 0 ? (
         <div style={{ color: "#666" }}>
@@ -547,6 +574,7 @@ export default function SavedPage() {
         </div>
       ) : (
         <div
+          className="mobile-card-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -562,23 +590,29 @@ export default function SavedPage() {
               : proxyImgUrl(p.baseUrl, p.id, 800, 800);
             const created = p.createdTime ? new Date(p.createdTime).toISOString().slice(0, 10) : "";
             const createdYear = created ? created.slice(0, 4) : "";
+            const cardHeadline = [p.description, createdYear].filter(Boolean).join(", ");
             const tags = tagsByPhoto[p.id] || [];
-            const isOpen = !!openTags[p.id];
-            const tagIds = new Set(tags.map((t) => t.personId));
-            const tagNames = tags
-              .map((t) => {
-                const fn = t.person?.firstName || "";
-                const ln = t.person?.lastName || "";
-                const full = `${fn} ${ln}`.trim();
-                return full || t.person?.name || "";
-              })
-              .filter(Boolean)
-              .sort((a, b) => a.localeCompare(b))
-              .join(", ");
+            const tagPeople = tags
+              .map((t) => t.person)
+              .filter((person): person is Person => !!person)
+              .sort(comparePeopleByLastFirst)
+              .filter((person) => !!displayName(person));
+            const nameDensityClass =
+              tagPeople.length > 6
+                ? "mobile-photo-card-names--crowded"
+                : tagPeople.length > 3
+                ? "mobile-photo-card-names--dense"
+                : "";
 
             return (
               <div
+                id={`photo-card-${p.id}`}
                 key={p.id}
+                className={
+                  focusedPhotoId === p.id
+                    ? "mobile-list-card mobile-photo-card mobile-photo-card--focused"
+                    : "mobile-list-card mobile-photo-card"
+                }
                 style={{
                   border: "2px solid #cfe4ff",
                   borderRadius: 12,
@@ -586,8 +620,9 @@ export default function SavedPage() {
                   position: "relative",
                   paddingBottom: 36,
                 }}
-              >
+                >
                 <div
+                  className="mobile-photo-card-frame"
                   style={{
                     width: "100%",
                     aspectRatio: "1 / 1",
@@ -620,6 +655,7 @@ export default function SavedPage() {
                 </div>
 
                 <div
+                  className="mobile-photo-card-meta"
                   style={{
                     marginTop: 6,
                     fontSize: 18,
@@ -631,18 +667,29 @@ export default function SavedPage() {
                     justifyContent: "space-between",
                   }}
                 >
-                  <div style={{ textAlign: "center", minHeight: 26 }}>
-                    {p.description ? <i>{p.description}</i> : null}
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    {p.location || createdYear ? (
-                      <div>
-                        {p.location ? p.location : ""}
-                        {p.location && createdYear ? ", " : ""}
-                        {createdYear || ""}
+                  <div className="mobile-photo-card-details" style={{ textAlign: "right" }}>
+                    {cardHeadline ? (
+                      <div className="mobile-photo-card-date">
+                        {cardHeadline}
                       </div>
                     ) : null}
-                    {tagsByPhoto[p.id] && tagNames ? <div>{tagNames}</div> : null}
+                    {p.location ? <div className="mobile-photo-card-location">{p.location}</div> : null}
+                    {tagsByPhoto[p.id] && tagPeople.length > 0 ? (
+                      <div className={["mobile-photo-card-names", nameDensityClass].filter(Boolean).join(" ")}>
+                        {tagPeople.map((tagPerson) => {
+                          const name = displayName(tagPerson);
+                          return (
+                            <a
+                              className={photoNameTokenClass(name)}
+                              href={personGalleryHref(tagPerson.id, p.id)}
+                              key={tagPerson.id}
+                            >
+                              {name}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -663,74 +710,27 @@ export default function SavedPage() {
         </div>
       )}
 
-  {viewerOpen && displayPhotos[viewerIndex] ? (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(248,250,252,0.55)",
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-            padding: 12,
-          }}
-        >
-          <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", width: "94vw", maxWidth: 1400, height: "88vh" }}>
-            <div
-              style={{
-                width: "100%",
-                height: "88vh",
-                borderRadius: 10,
-                overflow: "hidden",
-                background: "transparent",
-                border: "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-                    <img
-                      src={viewerSrc(displayPhotos[viewerIndex])}
-                      alt={displayPhotos[viewerIndex].id}
-                      draggable={false}
-                      onDragStart={(e) => e.preventDefault()}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                        display: "block",
-                    ...imageTransform(displayPhotos[viewerIndex]),
-                      }}
-                    />
-            </div>
-            <button
-              onClick={() => setViewerOpen(false)}
-              style={{ position: "absolute", top: -8, right: -8, fontSize: 12 }}
-            >
-              Close
-            </button>
-            <button
-              onClick={() =>
-                setViewerIndex((i) => (i > 0 ? i - 1 : displayPhotos.length - 1))
-              }
-              style={{ position: "absolute", left: -8, top: "50%", transform: "translate(-100%,-50%)", fontSize: 12 }}
-            >
-              ← Prev
-            </button>
-            <button
-              onClick={() =>
-                setViewerIndex((i) => (i < displayPhotos.length - 1 ? i + 1 : 0))
-              }
-              style={{ position: "absolute", right: -8, top: "50%", transform: "translate(100%,-50%)", fontSize: 12 }}
-            >
-              Next →
-            </button>
-          </div>
-        </div>
-  ) : null}
+      {viewerOpen && displayPhotos[viewerIndex] ? (
+        <PhotoLightbox
+          src={viewerSrc(displayPhotos[viewerIndex])}
+          alt={displayPhotos[viewerIndex].id}
+          rotation={displayPhotos[viewerIndex].rotation}
+          caption={displayPhotos[viewerIndex].description}
+          year={
+            displayPhotos[viewerIndex].createdTime
+              ? new Date(displayPhotos[viewerIndex].createdTime as string).toISOString().slice(0, 4)
+              : null
+          }
+          people={(tagsByPhoto[displayPhotos[viewerIndex].id] || []).map((tag) => ({
+            id: tag.person.id,
+            name: displayName(tag.person),
+          }))}
+          getPersonHref={(personId) => personGalleryHref(personId, displayPhotos[viewerIndex].id)}
+          onClose={() => setViewerOpen(false)}
+          onPrev={() => setViewerIndex((i) => (i > 0 ? i - 1 : displayPhotos.length - 1))}
+          onNext={() => setViewerIndex((i) => (i < displayPhotos.length - 1 ? i + 1 : 0))}
+        />
+      ) : null}
 
       {editPhotoId && isEditing ? (
         <div
@@ -759,6 +759,7 @@ export default function SavedPage() {
               overflow: "auto",
               border: "2px solid #cfe4ff",
             }}
+            className="photo-edit-modal"
           >
             {(() => {
               const p = photos.find((x) => x.id === editPhotoId);
@@ -768,30 +769,18 @@ export default function SavedPage() {
               const tags = tagsByPhoto[p.id] || [];
               const tagIds = new Set(tags.map((t) => t.personId));
               const tagNames = tags
-                .map((t) => {
-                  const fn = t.person?.firstName || "";
-                  const ln = t.person?.lastName || "";
-                  const full = `${fn} ${ln}`.trim();
-                  return full || t.person?.name || "";
-                })
+                .map((t) => t.person)
+                .filter((person): person is Person => !!person)
+                .sort(comparePeopleByLastFirst)
+                .map(displayName)
                 .filter(Boolean)
-                .sort((a, b) => a.localeCompare(b))
-                .join(", ");
+                ;
 
               return (
                 <div style={{ display: "grid", gap: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontWeight: 600 }}>Edit Photo</div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        onClick={async () => {
-                          await saveAllEdits(p.id);
-                          setEditPhotoId(null);
-                        }}
-                        style={{ fontSize: 10, padding: "3px 6px" }}
-                      >
-                        Save
-                      </button>
                       <button
                         onClick={() => {
                           cancelEdits(p.id);
@@ -804,7 +793,7 @@ export default function SavedPage() {
                     </div>
                   </div>
                   <div
-                    id={`crop-area-${p.id}`}
+                    className="photo-edit-image"
                     style={{
                       width: "100%",
                       height: "60vh",
@@ -830,7 +819,7 @@ export default function SavedPage() {
                       }}
                     />
                   </div>
-                  <div style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
+                  <div className="photo-edit-meta" style={{ fontSize: 12, color: "#444", textAlign: "right" }}>
                     {p.description ? (
                       <div>
                         <i>{p.description}</i>
@@ -843,9 +832,18 @@ export default function SavedPage() {
                         {createdYear || ""}
                       </div>
                     ) : null}
-                    {tagNames ? <div>{tagNames}</div> : null}
+                    {tagNames.length > 0 ? (
+                      <div className="mobile-photo-card-names">
+                        {tagNames.map((name, index) => (
+                          <span className="mobile-photo-name-token" key={name}>
+                            {name}
+                            {index < tagNames.length - 1 ? "," : null}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
-                  <div style={{ display: "grid", gap: 8 }}>
+                  <div className="photo-edit-actions-grid" style={{ display: "grid", gap: 8 }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
                       <button
                         onClick={() => {
@@ -905,12 +903,6 @@ export default function SavedPage() {
                         style={{ fontSize: 10, padding: "3px 6px", minWidth: 78 }}
                       >
                         Rotate 90°
-                      </button>
-                      <button
-                        onClick={() => deletePhoto(p.id)}
-                        style={{ fontSize: 10, padding: "3px 6px", minWidth: 86, color: "#b91c1c" }}
-                      >
-                        Delete Image
                       </button>
                     </div>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
@@ -997,7 +989,6 @@ export default function SavedPage() {
                                 />
                                 <span>
                                   {displayName(person)}
-                                  {person.birthYear ? ` (${person.birthYear})` : ""}
                                 </span>
                               </label>
                             );
@@ -1085,6 +1076,23 @@ export default function SavedPage() {
                       ) : null}
                     </div>
                   ) : null}
+                  <div className="photo-edit-save-row photo-edit-save-row--split">
+                    <button
+                      onClick={() => deletePhoto(p.id)}
+                      className="photo-edit-danger photo-edit-delete-footer"
+                    >
+                      Delete Image
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await saveAllEdits(p.id);
+                        setEditPhotoId(null);
+                      }}
+                      className="photo-edit-save-button"
+                    >
+                      Save
+                    </button>
+                  </div>
                 </div>
               );
             })()}

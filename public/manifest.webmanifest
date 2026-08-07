@@ -1,0 +1,18 @@
+{
+  "name": "PhotoTree",
+  "short_name": "PhotoTree",
+  "description": "A private family tree and photo archive.",
+  "start_url": "/family-tree-manual",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/ChatGPT%20Image%20Feb%2010,%202026,%2010_13_52%20PM.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -88,15 +88,40 @@ function dateFromLastModified(ms?: number | null): Date | null {
   return d;
 }
 
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+const LEGACY_FALLBACK_MAX_BYTES = 4 * 1024 * 1024;
+
 export async function POST(req: Request) {
   try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Photo storage is not configured. Add BLOB_READ_WRITE_TOKEN to your local .env.local and Vercel project environment variables, then restart the app.",
+        },
+        { status: 500 }
+      );
+    }
+
     const form = await req.formData();
     const files = [
       ...(form.getAll("files").filter(Boolean) as File[]),
       ...(form.getAll("file").filter(Boolean) as File[]),
     ];
     const metaRaw = form.get("meta");
-    let metaList: Array<{ createdTime?: string }> = [];
+    let metaList: Array<{ createdTime?: string; name?: string; size?: number; type?: string }> = [];
     if (metaRaw) {
       try {
         metaList = JSON.parse(String(metaRaw));
@@ -122,6 +147,33 @@ export async function POST(req: Request) {
 
     for (let i = 0; i < files.length; i += 1) {
       const file = files[i];
+      const fileName = file.name || metaList[i]?.name || `photo-${i + 1}`;
+      if (!file.size) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Selected file "${fileName}" is empty and cannot be uploaded.`,
+            fileName,
+            sizeBytes: file.size,
+          },
+          { status: 400 }
+        );
+      }
+      if (file.size > LEGACY_FALLBACK_MAX_BYTES) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              `The fallback upload route cannot safely receive "${fileName}" because it is ${formatBytes(file.size)}. Direct Blob upload should handle this file instead.`,
+            hint:
+              "If you see this message, the direct browser-to-Blob upload failed before fallback. Check BLOB_READ_WRITE_TOKEN, network connectivity, and the /api/photos/import-device/client-upload route.",
+            fileName,
+            sizeBytes: file.size,
+            sizeLimitBytes: LEGACY_FALLBACK_MAX_BYTES,
+          },
+          { status: 413 }
+        );
+      }
       const mimeType = file.type || "image/jpeg";
       const bytes = Buffer.from(await file.arrayBuffer());
       const id = crypto.randomUUID();
@@ -156,7 +208,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, items: created });
   } catch (e: any) {
     return NextResponse.json(
-      { ok: false, error: String(e?.message || e) },
+      {
+        ok: false,
+        error: "Device import fallback failed",
+        details: String(e?.message || e),
+        hint:
+          "The app first tries direct browser-to-Blob upload. This fallback is only for small files and diagnostics.",
+      },
       { status: 500 }
     );
   }
